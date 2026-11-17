@@ -2,11 +2,11 @@
    badges.css : 施設バッジ・車線描画・速度標識・ピクトグラム・国道/県道標識
    ========================================================= */
 
-/* 施設種別バッジ（IC / JCT / PA / SA / SIC 等） */
+/* 施設種別バッジ（IC / JCT / PA / SA / SIC / BS 等） */
 .facility-badges {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   flex-wrap: wrap;
 }
 
@@ -22,6 +22,17 @@
   font-weight: 800;
   letter-spacing: 0.02em;
   line-height: 1;
+  transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+}
+
+.f-badge.clickable-badge {
+  cursor: pointer;
+}
+
+.f-badge.clickable-badge:hover {
+  transform: translateY(-1px) scale(1.06);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  filter: brightness(1.06);
 }
 
 /* IC：緑背景・白文字 */
@@ -53,19 +64,28 @@
   border: 1.5px solid #8e24aa;
 }
 
-/* その他（TB料金所・TNトンネル・BSバスストップ） */
+/* BS（バス停留所・バスストップ）：青背景・白文字 */
+.f-badge.bs {
+  background-color: #0277bd;
+  color: #ffffff;
+  border: 1.5px solid #0277bd;
+}
+
+/* TB（本線料金所・料金所） */
 .f-badge.tb {
   background-color: #455a64;
   color: #ffffff;
   border: 1.5px solid #455a64;
 }
 
+/* TN（トンネル） */
 .f-badge.tn {
   background-color: #5d4037;
   color: #ffffff;
   border: 1.5px solid #5d4037;
 }
 
+/* その他 */
 .f-badge.other {
   background-color: #eceff1;
   color: #37474f;
@@ -225,6 +245,12 @@
 .amenity-icon-box.info {
   background-color: #2e7d32;
   border-color: #1b5e20;
+  color: #ffffff;
+}
+
+.amenity-icon-box.vending {
+  background-color: #546e7a;
+  border-color: #37474f;
   color: #ffffff;
 }
 
