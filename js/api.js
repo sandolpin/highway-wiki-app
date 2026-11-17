@@ -4,7 +4,9 @@
 
 const WikiAPI = (() => {
   const ENDPOINT = "https://ja.wikipedia.org/w/api.php";
-  const CACHE_PREFIX = "hw_wiki_cache_v1_";
+  const CACHE_PREFIX = "hw_wiki_cache_v2_";
+  const SUMMARY_PREFIX = "hw_wiki_sum_v2_";
+  const pendingSummaries = new Map();
 
   /**
    * data/routes.json から路線マスター一覧を取得
@@ -22,7 +24,6 @@ const WikiAPI = (() => {
 
   /**
    * 指定したWikipedia記事タイトルのHTML・セクション情報を取得
-   * redirects=1 により「海老名SA」→「海老名サービスエリア」等も自動解決
    */
   async function fetchPageHtml(pageTitle) {
     const cleanTitle = (pageTitle || "").trim();
@@ -70,15 +71,81 @@ const WikiAPI = (() => {
 
     try {
       sessionStorage.setItem(cacheKey, JSON.stringify(result));
-    } catch (_) {
-      // sessionStorage容量超過時は無視
-    }
+    } catch (_) {}
 
     return result;
   }
 
+  /**
+   * ホバープレビュー用：Wikipedia記事の冒頭要約（プレーンテキスト）を高速取得
+   */
+  async function fetchPageSummary(pageTitle) {
+    const cleanTitle = (pageTitle || "").trim();
+    if (!cleanTitle) return null;
+
+    const cacheKey = SUMMARY_PREFIX + cleanTitle;
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch (_) {
+        sessionStorage.removeItem(cacheKey);
+      }
+    }
+
+    if (pendingSummaries.has(cleanTitle)) {
+      return pendingSummaries.get(cleanTitle);
+    }
+
+    const promise = (async () => {
+      try {
+        const params = new URLSearchParams({
+          action: "query",
+          format: "json",
+          origin: "*",
+          redirects: "1",
+          prop: "extracts",
+          exintro: "1",
+          explaintext: "1",
+          exsentences: "3",
+          titles: cleanTitle
+        });
+
+        const res = await fetch(`${ENDPOINT}?${params.toString()}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        const pages = data?.query?.pages;
+        if (!pages) return null;
+
+        const pageObj = Object.values(pages)[0];
+        if (!pageObj || pageObj.missing !== undefined) {
+          const emptyRes = { title: cleanTitle, extract: "" };
+          sessionStorage.setItem(cacheKey, JSON.stringify(emptyRes));
+          return emptyRes;
+        }
+
+        const summary = {
+          title: pageObj.title || cleanTitle,
+          extract: (pageObj.extract || "").replace(/\s+/g, " ").trim()
+        };
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify(summary));
+        } catch (_) {}
+        return summary;
+      } catch (_) {
+        return null;
+      } finally {
+        pendingSummaries.delete(cleanTitle);
+      }
+    })();
+
+    pendingSummaries.set(cleanTitle, promise);
+    return promise;
+  }
+
   return {
     fetchRoutesMaster,
-    fetchPageHtml
+    fetchPageHtml,
+    fetchPageSummary
   };
 })();
