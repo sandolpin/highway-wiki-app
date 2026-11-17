@@ -12,13 +12,29 @@ const WikiRenderer = (() => {
   }
 
   /**
-   * 施設種別バッジ（IC / JCT / PA / SA / SIC 等）のHTML生成
+   * 施設種別バッジ（IC / JCT / PA / SA / SIC / BS 等）のHTML生成
+   * badgeItems と clickable=true を渡すとバッジ個別のクリック・ホバーに対応
    */
-  function renderFacilityBadges(types) {
+  function renderFacilityBadges(types, badgeItems = null, clickable = false) {
+    const validClasses = ["ic", "jct", "sa", "pa", "sic", "bs", "tb", "tn"];
+
+    if (Array.isArray(badgeItems) && badgeItems.length > 0) {
+      const badgesHtml = badgeItems.map(b => {
+        const lower = (b.type || "").toLowerCase();
+        const cls = validClasses.includes(lower) ? lower : "other";
+        const clickCls = clickable ? "clickable-badge" : "";
+        const dataAttrs = clickable
+          ? `data-wiki="${escapeHtml(b.wikiTitle)}" data-type="${escapeHtml(b.type)}" data-label="${escapeHtml(b.label)}" title="${escapeHtml(b.label)} の詳細へ移動"`
+          : "";
+        return `<span class="f-badge ${cls} ${clickCls}" ${dataAttrs}>${escapeHtml(b.type)}</span>`;
+      }).join("");
+      return `<span class="facility-badges">${badgesHtml}</span>`;
+    }
+
     const list = Array.isArray(types) && types.length > 0 ? types : ["IC"];
     const badgesHtml = list.map(t => {
       const lower = t.toLowerCase();
-      const cls = ["ic", "jct", "sa", "pa", "sic", "tb", "tn"].includes(lower) ? lower : "other";
+      const cls = validClasses.includes(lower) ? lower : "other";
       return `<span class="f-badge ${cls}">${escapeHtml(t)}</span>`;
     }).join("");
     return `<span class="facility-badges">${badgesHtml}</span>`;
@@ -61,7 +77,7 @@ const WikiRenderer = (() => {
   }
 
   /**
-   * SA / PA 画面：方面別の駐車台数・ピクトグラム・店舗リスト描画（画像3準拠）
+   * SA / PA 画面：方面別の駐車台数・ピクトグラム・店舗リスト描画
    */
   function renderSapaDirection(dir) {
     const parkingHtml = (dir.largeParking || dir.smallParking) ? `
@@ -122,6 +138,17 @@ const WikiRenderer = (() => {
         </div>
       `);
     }
+    if (dir.hasVending) {
+      amenities.push(`
+        <div class="amenity-icon-box vending" title="自動販売機">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="5" y="3" width="14" height="18" rx="2"></rect>
+            <rect x="8" y="6" width="8" height="6"></rect>
+            <line x1="8" y1="16" x2="16" y2="16"></line>
+          </svg>
+        </div>
+      `);
+    }
 
     const amenityHtml = amenities.length > 0 ? `<div class="amenity-row">${amenities.join("")}</div>` : "";
 
@@ -146,7 +173,10 @@ const WikiRenderer = (() => {
         : "default";
       const titleHtml = escapeHtml(cat.title).replace(/(\(24時間\)|（24時間）)/g, `<span class="badge-24h">$1</span>`);
       const subHtml = cat.items && cat.items.length > 0
-        ? `<ul class="shop-sub-list">${cat.items.map(it => `<li>${escapeHtml(it)}</li>`).join("")}</ul>`
+        ? `<ul class="shop-sub-list">${cat.items.map(it => {
+            const subHighlighted = escapeHtml(it).replace(/(\(24時間\)|（24時間）)/g, `<span class="badge-24h">$1</span>`);
+            return `<li>${subHighlighted}</li>`;
+          }).join("")}</ul>`
         : "";
 
       return `
@@ -181,7 +211,7 @@ const WikiRenderer = (() => {
   }
 
   /**
-   * IC / JCT 詳細画面の描画（接続道路の国道おにぎり・県道ヘキサ・隣接ナビ）
+   * IC / JCT / BS 詳細画面の描画
    */
   function renderIcJctDetail(icDetail, meta, adjacent) {
     const heroHtml = `
@@ -296,7 +326,6 @@ const WikiRenderer = (() => {
    * トップ画面：日本列島・高速道路ネットワーク簡易SVGマップ描画
    */
   function renderJapanMap(container, routes, activeRegion, onSelectRegion, onSelectRoute) {
-    // 地方ブロックのデフォルメ座標ポリゴン
     const regions = [
       { id: "hokkaido", label: "北海道", points: "325,25 385,25 395,75 350,95 320,122 308,108 325,70" },
       { id: "tohoku", label: "東北", points: "312,135 348,135 352,225 315,245 302,215" },
