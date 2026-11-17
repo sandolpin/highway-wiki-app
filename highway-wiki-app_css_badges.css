@@ -1,0 +1,318 @@
+/* =========================================================
+   badges.css : 施設バッジ・車線描画・速度標識・ピクトグラム・国道/県道標識
+   ========================================================= */
+
+/* 施設種別バッジ（IC / JCT / PA / SA / SIC 等） */
+.facility-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.f-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+
+/* IC：緑背景・白文字 */
+.f-badge.ic {
+  background-color: #238636;
+  color: #ffffff;
+  border: 1.5px solid #238636;
+}
+
+/* JCT：白背景・緑枠・緑文字 */
+.f-badge.jct {
+  background-color: #ffffff;
+  color: #238636;
+  border: 1.8px solid #238636;
+}
+
+/* SA / PA：濃緑背景・白文字 */
+.f-badge.sa,
+.f-badge.pa {
+  background-color: #145a32;
+  color: #ffffff;
+  border: 1.5px solid #145a32;
+}
+
+/* SIC（スマートIC）：紫背景・白文字 */
+.f-badge.sic {
+  background-color: #8e24aa;
+  color: #ffffff;
+  border: 1.5px solid #8e24aa;
+}
+
+/* その他（TB料金所・TNトンネル・BSバスストップ） */
+.f-badge.tb {
+  background-color: #455a64;
+  color: #ffffff;
+  border: 1.5px solid #455a64;
+}
+
+.f-badge.tn {
+  background-color: #5d4037;
+  color: #ffffff;
+  border: 1.5px solid #5d4037;
+}
+
+.f-badge.other {
+  background-color: #eceff1;
+  color: #37474f;
+  border: 1.5px solid #90a4ae;
+}
+
+/* =========================================================
+   路線状況：車線数のオリジナル描画
+   ========================================================= */
+.lanes-visual-group {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+}
+
+.lane-direction-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.lane-road-box {
+  display: flex;
+  align-items: stretch;
+  height: 30px;
+  background-color: var(--hw-asphalt);
+  border-radius: 5px;
+  overflow: hidden;
+  padding: 0 2px;
+}
+
+.lane-strip {
+  width: 15px;
+  height: 100%;
+  border-right: 2px dashed #ffffff;
+}
+
+.lane-strip:last-child {
+  border-right: none;
+}
+
+.lane-count-num {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1;
+}
+
+/* =========================================================
+   路線状況：最高速度の道路標識描画
+   ========================================================= */
+.speed-signs-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.speed-sign-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.speed-sign-label {
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--text-main);
+  text-align: center;
+  max-width: 34px;
+}
+
+.speed-sign-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--hw-red);
+  background-color: #ffffff;
+  color: var(--text-main);
+  font-size: 13px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: -0.04em;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* =========================================================
+   SA / PA 画面：駐車台数・ピクトグラム・店舗アイコン
+   ========================================================= */
+.parking-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.parking-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  border: 1.8px solid #444444;
+  border-radius: 10px;
+  padding: 6px 14px;
+  background-color: #ffffff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.parking-card svg {
+  width: 26px;
+  height: 26px;
+  stroke: #222222;
+  fill: none;
+  stroke-width: 2;
+}
+
+.amenity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.amenity-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1.8px solid #444444;
+  background-color: #ffffff;
+  color: #222222;
+  position: relative;
+}
+
+.amenity-icon-box.ev {
+  background-color: #0288d1;
+  border-color: #0277bd;
+  color: #ffffff;
+}
+
+.amenity-icon-box.gs {
+  background-color: #fbc02d;
+  border-color: #f9a825;
+  color: #222222;
+}
+
+.amenity-icon-box.info {
+  background-color: #2e7d32;
+  border-color: #1b5e20;
+  color: #ffffff;
+}
+
+.amenity-icon-box svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* 店舗カテゴリバッジ */
+.shop-cat-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.shop-cat-badge.takeout { background-color: #c0982b; }
+.shop-cat-badge.foodcourt { background-color: #ef6c00; }
+.shop-cat-badge.shopping { background-color: #1e88e5; }
+.shop-cat-badge.cafe { background-color: #795548; }
+.shop-cat-badge.restaurant { background-color: #d84315; }
+.shop-cat-badge.convenience { background-color: #2e7d32; }
+.shop-cat-badge.default { background-color: #546e7a; }
+
+.shop-cat-badge svg {
+  width: 16px;
+  height: 16px;
+}
+
+.badge-24h {
+  color: var(--hw-purple-text);
+  font-weight: 800;
+}
+
+/* =========================================================
+   IC / JCT 画面：国道おにぎり・県道ヘキサゴン標識
+   ========================================================= */
+.road-sign-onigiri {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  position: relative;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.road-sign-onigiri svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.road-sign-onigiri span {
+  position: relative;
+  z-index: 1;
+  margin-top: 2px;
+}
+
+.road-sign-hexa {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  position: relative;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.road-sign-hexa svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.road-sign-hexa span {
+  position: relative;
+  z-index: 1;
+}

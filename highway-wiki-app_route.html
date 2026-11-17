@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>路線詳細 - 高速道路Wikipediaガイド</title>
+  <link rel="stylesheet" href="css/common.css" />
+  <link rel="stylesheet" href="css/badges.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body data-page="route">
+  <div class="app-layout">
+    <!-- 左サイドバー（共有画像1・2準拠） -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <a href="index.html" class="back-btn" title="路線一覧に戻る">
+          <span class="back-btn-circle">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </span>
+          <span>路線一覧へ</span>
+        </a>
+
+        <div class="title-plate" id="routeTitlePlate">
+          <span class="route-num-badge" id="routeNumBadge">E1</span>
+          <span class="title-plate-name" id="routeTitleName">東名高速道路</span>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="路線メニュー">
+          <button type="button" class="nav-item" data-tab="overview">概要</button>
+          <button type="button" class="nav-item active" data-tab="interchanges">インターチェンジなど</button>
+          <button type="button" class="nav-item" data-tab="status">路線状況</button>
+        </nav>
+      </div>
+
+      <div class="sidebar-footer">
+        記事はwikipediaより<br />引用しております。
+        <br />
+        <a id="wikiSourceLink" href="https://ja.wikipedia.org/" target="_blank" rel="noopener noreferrer">Wikipediaで原文を見る ↗</a>
+      </div>
+    </aside>
+
+    <!-- 右側メインエリア -->
+    <main class="main-content" id="routeMainContent">
+      <div class="loading-box">
+        <div class="spinner"></div>
+        <div>Wikipediaから路線データを読み込んでいます...</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script src="js/parser.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

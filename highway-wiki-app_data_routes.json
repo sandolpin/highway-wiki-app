@@ -1,0 +1,584 @@
+[
+  {
+    "id": "E1",
+    "number": "E1",
+    "name": "東名高速道路",
+    "wikiTitle": "東名高速道路",
+    "region": "kanto-chubu",
+    "regionLabel": "関東・中部",
+    "operator": "NEXCO中日本",
+    "section": "東京IC 〜 小牧IC",
+    "length": "346.7 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        310,
+        295
+      ],
+      [
+        275,
+        310
+      ],
+      [
+        235,
+        305
+      ]
+    ]
+  },
+  {
+    "id": "E1-meishin",
+    "number": "E1",
+    "name": "名神高速道路",
+    "wikiTitle": "名神高速道路",
+    "region": "chubu-kinki",
+    "regionLabel": "中部・近畿",
+    "operator": "NEXCO中日本・西日本",
+    "section": "小牧IC 〜 西宮IC",
+    "length": "189.3 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        235,
+        305
+      ],
+      [
+        205,
+        315
+      ],
+      [
+        180,
+        320
+      ]
+    ]
+  },
+  {
+    "id": "E1A-shintomei",
+    "number": "E1A",
+    "name": "新東名高速道路",
+    "wikiTitle": "新東名高速道路",
+    "region": "kanto-chubu",
+    "regionLabel": "関東・中部",
+    "operator": "NEXCO中日本",
+    "section": "海老名南JCT 〜 豊田東JCT",
+    "length": "253.2 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        302,
+        290
+      ],
+      [
+        270,
+        302
+      ],
+      [
+        240,
+        298
+      ]
+    ]
+  },
+  {
+    "id": "E1A-shinmeishin",
+    "number": "E1A",
+    "name": "新名神高速道路",
+    "wikiTitle": "新名神高速道路",
+    "region": "chubu-kinki",
+    "regionLabel": "中部・近畿",
+    "operator": "NEXCO中日本・西日本",
+    "section": "四日市JCT 〜 神戸JCT",
+    "length": "174.0 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        225,
+        315
+      ],
+      [
+        195,
+        322
+      ],
+      [
+        175,
+        323
+      ]
+    ]
+  },
+  {
+    "id": "E2",
+    "number": "E2",
+    "name": "山陽自動車道",
+    "wikiTitle": "山陽自動車道",
+    "region": "chugoku",
+    "regionLabel": "中国",
+    "operator": "NEXCO西日本",
+    "section": "神戸JCT 〜 山口JCT",
+    "length": "466.4 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        175,
+        323
+      ],
+      [
+        135,
+        326
+      ],
+      [
+        95,
+        333
+      ]
+    ]
+  },
+  {
+    "id": "E2A",
+    "number": "E2A",
+    "name": "中国自動車道",
+    "wikiTitle": "中国自動車道",
+    "region": "kinki-chugoku",
+    "regionLabel": "近畿・中国",
+    "operator": "NEXCO西日本",
+    "section": "吹田JCT 〜 下関IC",
+    "length": "540.1 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        182,
+        316
+      ],
+      [
+        135,
+        315
+      ],
+      [
+        88,
+        335
+      ]
+    ]
+  },
+  {
+    "id": "E3",
+    "number": "E3",
+    "name": "九州自動車道",
+    "wikiTitle": "九州自動車道",
+    "region": "kyushu",
+    "regionLabel": "九州",
+    "operator": "NEXCO西日本",
+    "section": "門司IC 〜 鹿児島IC",
+    "length": "346.3 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        85,
+        340
+      ],
+      [
+        72,
+        368
+      ],
+      [
+        66,
+        405
+      ]
+    ]
+  },
+  {
+    "id": "E4",
+    "number": "E4",
+    "name": "東北自動車道",
+    "wikiTitle": "東北自動車道",
+    "region": "kanto-tohoku",
+    "regionLabel": "関東・東北",
+    "operator": "NEXCO東日本",
+    "section": "川口JCT 〜 青森IC",
+    "length": "679.5 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        312,
+        285
+      ],
+      [
+        326,
+        225
+      ],
+      [
+        335,
+        145
+      ]
+    ]
+  },
+  {
+    "id": "E5",
+    "number": "E5",
+    "name": "道央自動車道",
+    "wikiTitle": "道央自動車道",
+    "region": "hokkaido",
+    "regionLabel": "北海道",
+    "operator": "NEXCO東日本",
+    "section": "大沼公園IC 〜 士別剣淵IC",
+    "length": "455.3 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        335,
+        118
+      ],
+      [
+        348,
+        86
+      ],
+      [
+        365,
+        62
+      ]
+    ]
+  },
+  {
+    "id": "E6",
+    "number": "E6",
+    "name": "常磐自動車道",
+    "wikiTitle": "常磐自動車道",
+    "region": "kanto-tohoku",
+    "regionLabel": "関東・東北",
+    "operator": "NEXCO東日本",
+    "section": "三郷JCT 〜 亘理IC",
+    "length": "300.4 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        316,
+        286
+      ],
+      [
+        334,
+        250
+      ],
+      [
+        334,
+        212
+      ]
+    ]
+  },
+  {
+    "id": "E8",
+    "number": "E8",
+    "name": "北陸自動車道",
+    "wikiTitle": "北陸自動車道",
+    "region": "chubu-kinki",
+    "regionLabel": "北陸・中部・近畿",
+    "operator": "NEXCO中日本・東日本",
+    "section": "新潟中央JCT 〜 米原JCT",
+    "length": "476.5 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        292,
+        225
+      ],
+      [
+        242,
+        265
+      ],
+      [
+        210,
+        305
+      ]
+    ]
+  },
+  {
+    "id": "E11",
+    "number": "E11",
+    "name": "高松自動車道",
+    "wikiTitle": "高松自動車道",
+    "region": "shikoku",
+    "regionLabel": "四国",
+    "operator": "NEXCO西日本",
+    "section": "鳴門IC 〜 川之江JCT",
+    "length": "109.7 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        162,
+        336
+      ],
+      [
+        145,
+        335
+      ],
+      [
+        130,
+        342
+      ]
+    ]
+  },
+  {
+    "id": "E14",
+    "number": "E14",
+    "name": "京葉道路",
+    "wikiTitle": "京葉道路",
+    "region": "kanto",
+    "regionLabel": "関東",
+    "operator": "NEXCO東日本",
+    "section": "篠崎IC 〜 蘇我IC",
+    "length": "36.7 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        317,
+        290
+      ],
+      [
+        326,
+        293
+      ]
+    ]
+  },
+  {
+    "id": "E17",
+    "number": "E17",
+    "name": "関越自動車道",
+    "wikiTitle": "関越自動車道",
+    "region": "kanto-chubu",
+    "regionLabel": "関東・甲信越",
+    "operator": "NEXCO東日本",
+    "section": "練馬IC 〜 長岡JCT",
+    "length": "246.3 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        309,
+        287
+      ],
+      [
+        292,
+        260
+      ],
+      [
+        288,
+        232
+      ]
+    ]
+  },
+  {
+    "id": "E18",
+    "number": "E18",
+    "name": "上信越自動車道",
+    "wikiTitle": "上信越自動車道",
+    "region": "kanto-chubu",
+    "regionLabel": "関東・甲信越",
+    "operator": "NEXCO東日本",
+    "section": "藤岡JCT 〜 上越JCT",
+    "length": "204.3 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        295,
+        268
+      ],
+      [
+        268,
+        264
+      ],
+      [
+        262,
+        248
+      ]
+    ]
+  },
+  {
+    "id": "E19",
+    "number": "E19",
+    "name": "中央自動車道",
+    "wikiTitle": "中央自動車道",
+    "region": "kanto-chubu",
+    "regionLabel": "関東・中部",
+    "operator": "NEXCO中日本",
+    "section": "高井戸IC 〜 小牧JCT",
+    "length": "344.9 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        308,
+        290
+      ],
+      [
+        274,
+        285
+      ],
+      [
+        238,
+        302
+      ]
+    ]
+  },
+  {
+    "id": "E20",
+    "number": "E20",
+    "name": "中央自動車道（富士吉田線）",
+    "wikiTitle": "中央自動車道",
+    "region": "kanto-chubu",
+    "regionLabel": "関東・中部",
+    "operator": "NEXCO中日本",
+    "section": "大月JCT 〜 河口湖IC",
+    "length": "22.8 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        292,
+        292
+      ],
+      [
+        286,
+        298
+      ]
+    ]
+  },
+  {
+    "id": "E28",
+    "number": "E28",
+    "name": "神戸淡路鳴門自動車道",
+    "wikiTitle": "神戸淡路鳴門自動車道",
+    "region": "kinki-shikoku",
+    "regionLabel": "近畿・四国",
+    "operator": "本州四国連絡高速道路",
+    "section": "神戸西IC 〜 鳴門IC",
+    "length": "89.0 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        174,
+        325
+      ],
+      [
+        168,
+        332
+      ],
+      [
+        162,
+        336
+      ]
+    ]
+  },
+  {
+    "id": "E50",
+    "number": "E50",
+    "name": "北関東自動車道",
+    "wikiTitle": "北関東自動車道",
+    "region": "kanto",
+    "regionLabel": "関東",
+    "operator": "NEXCO東日本",
+    "section": "高崎JCT 〜 水戸南IC",
+    "length": "150.0 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        296,
+        268
+      ],
+      [
+        314,
+        268
+      ],
+      [
+        330,
+        267
+      ]
+    ]
+  },
+  {
+    "id": "E58",
+    "number": "E58",
+    "name": "沖縄自動車道",
+    "wikiTitle": "沖縄自動車道",
+    "region": "kyushu",
+    "regionLabel": "沖縄",
+    "operator": "NEXCO西日本",
+    "section": "那覇IC 〜 許田IC",
+    "length": "57.3 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        35,
+        422
+      ],
+      [
+        44,
+        412
+      ]
+    ]
+  },
+  {
+    "id": "C1",
+    "number": "C1",
+    "name": "首都高速都心環状線",
+    "wikiTitle": "首都高速都心環状線",
+    "region": "kanto",
+    "regionLabel": "関東（首都圏）",
+    "operator": "首都高速道路",
+    "section": "江戸橋JCT 〜 浜崎橋JCT（環状）",
+    "length": "14.8 km",
+    "color": "#0068b7",
+    "mapCoords": [
+      [
+        312,
+        290
+      ],
+      [
+        315,
+        292
+      ]
+    ]
+  },
+  {
+    "id": "C3",
+    "number": "C3",
+    "name": "東京外環自動車道",
+    "wikiTitle": "東京外環自動車道",
+    "region": "kanto",
+    "regionLabel": "関東（首都圏）",
+    "operator": "NEXCO東日本",
+    "section": "大泉JCT 〜 高谷JCT",
+    "length": "49.5 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        309,
+        286
+      ],
+      [
+        316,
+        286
+      ],
+      [
+        319,
+        291
+      ]
+    ]
+  },
+  {
+    "id": "C4",
+    "number": "C4",
+    "name": "首都圏中央連絡自動車道（圏央道）",
+    "wikiTitle": "首都圏中央連絡自動車道",
+    "region": "kanto",
+    "regionLabel": "関東（首都圏）",
+    "operator": "NEXCO東日本・中日本",
+    "section": "釜利谷JCT 〜 大栄JCT",
+    "length": "300.0 km",
+    "color": "#1b7837",
+    "mapCoords": [
+      [
+        308,
+        298
+      ],
+      [
+        301,
+        282
+      ],
+      [
+        326,
+        284
+      ]
+    ]
+  }
+]
