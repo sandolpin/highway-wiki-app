@@ -8,9 +8,19 @@ const WikiParser = (() => {
    */
   function cleanText(str) {
     return (str || "")
-      .replace(/\[\s*(?:注釈?|出典)?\s*\d+\s*\]/g, "")
+      .replace(/\[\s*(?:注釈?|出典|要出典|リンク切れ)?\s*\d*\s*\]/g, "")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  /**
+   * 見出し要素から [編集 | ソースを編集] を完全除去してテキスト取得
+   */
+  function cleanHeadingText(el) {
+    if (!el) return "";
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll(".mw-editsection, .mw-editsection-bracket, script, style").forEach(n => n.remove());
+    return cleanText(clone.textContent);
   }
 
   /**
@@ -20,7 +30,6 @@ const WikiParser = (() => {
     const root = doc.querySelector(".mw-parser-output") || doc.body;
     const clone = root.cloneNode(true);
     clone.querySelectorAll(".mw-editsection, script, style, .navbox, .sistersitebox, .ambox").forEach(el => el.remove());
-    // Wikipedia内部リンクを別タブのWikipedia本家URLに変換
     clone.querySelectorAll("a[href^='/wiki/']").forEach(a => {
       a.setAttribute("href", "https://ja.wikipedia.org" + a.getAttribute("href"));
       a.setAttribute("target", "_blank");
@@ -82,7 +91,7 @@ const WikiParser = (() => {
       const isH3 = child.tagName === "H3" || child.classList.contains("mw-heading3");
 
       if (level === "H2" && isH2) {
-        const hText = cleanText(child.textContent);
+        const hText = cleanHeadingText(child);
         if (keywords.some(kw => hText.includes(kw))) {
           capturing = true;
           continue;
@@ -91,7 +100,7 @@ const WikiParser = (() => {
         }
       } else if (level === "H3" && (isH2 || isH3)) {
         if (isH2 && capturing) break;
-        const hText = cleanText(child.textContent);
+        const hText = cleanHeadingText(child);
         if (isH3 && keywords.some(kw => hText.includes(kw))) {
           capturing = true;
           continue;
@@ -108,32 +117,69 @@ const WikiParser = (() => {
   }
 
   /**
-   * 施設名文字列から種別バッジ配列（IC, JCT, SA, PA, SIC 等）と表示名を解析
+   * HTMLテーブルの rowspan / colspan を展開し、2次元グリッド配列に変換
+   * これにより結合セルがあっても列番号が絶対にズレない
    */
-  function detectFacilityTypesAndName(rawName) {
-    let text = cleanText(rawName);
+  function expandTableToGrid(table) {
+    const trs = Array.from(table.querySelectorAll("tr"));
+    const grid = [];
+
+    for (let r = 0; r < trs.length; r++) {
+      if (!grid[r]) grid[r] = [];
+      const cells = Array.from(trs[r].querySelectorAll("th, td"));
+      let colPtr = 0;
+
+      for (const cell of cells) {
+        while (grid[r][colPtr] !== undefined) {
+          colPtr++;
+        }
+        const rowspan = Math.max(1, parseInt(cell.getAttribute("rowspan") || "1", 10));
+        const colspan = Math.max(1, parseInt(cell.getAttribute("colspan") || "1", 10));
+
+        for (let dr = 0; dr < rowspan; dr++) {
+          for (let dc = 0; dc < colspan; dc++) {
+            if (!grid[r + dr]) grid[r + dr] = [];
+            grid[r + dr][colPtr + dc] = {
+              cell,
+              isOrigin: dr === 0 && dc === 0,
+              rowspan,
+              colspan
+            };
+          }
+        }
+        colPtr += colspan;
+      }
+    }
+    return grid;
+  }
+
+  /**
+   * テキストから施設種別配列を判定（BSを独立判定しIC誤爆を防ぐ）
+   */
+  function detectTypesFromText(rawText) {
+    const text = cleanText(rawText);
     const types = [];
 
-    // スマートIC判定
     if (/スマートIC|SIC/i.test(text)) {
       types.push("SIC");
     }
-    // JCT判定
     if (/JCT|ジャンクション/i.test(text)) {
       types.push("JCT");
     }
-    // IC判定（SICのみの場合は重複させない）
-    if (/(?<![A-Z])IC|インターチェンジ/i.test(text) && !/スマートIC|SIC/i.test(text)) {
+    // 「スマートIC」「SIC」を除いた文字列に IC / インターチェンジ があるか判定
+    const textWithoutSic = text.replace(/スマートIC|SIC/gi, "");
+    if (/(?<![A-Z])IC|インターチェンジ/i.test(textWithoutSic)) {
       types.push("IC");
     }
-    // SA / PA判定
     if (/SA|サービスエリア/i.test(text)) {
       types.push("SA");
     }
     if (/PA|パーキングエリア/i.test(text)) {
       types.push("PA");
     }
-    // 料金所・トンネル・バスストップ
+    if (/BS|バスストップ|バス停留所/i.test(text)) {
+      types.push("BS");
+    }
     if (/TB|本線料金所|料金所/i.test(text)) {
       types.push("TB");
     }
@@ -141,20 +187,94 @@ const WikiParser = (() => {
       types.push("TN");
     }
 
+    return types;
+  }
+
+  /**
+   * 施設名セルから表示名・種別・個別リンク（PAとIC併設時の個別遷移先）を解析
+   */
+  function parseFacilityCell(nameCell) {
+    const rawName = cleanText(nameCell.textContent);
+    let types = detectTypesFromText(rawName);
     if (types.length === 0) {
-      types.push("IC");
+      types = ["IC"];
     }
 
+    // セル内の全Wikipediaリンクを走査し、種別ごとの遷移先記事を特定
+    const anchors = Array.from(nameCell.querySelectorAll("a[title]")).filter(a => {
+      const href = a.getAttribute("href") || "";
+      return !href.startsWith("#");
+    });
+
+    const linkInfos = anchors.map(a => {
+      const linkText = cleanText(a.textContent);
+      const titleAttr = (a.getAttribute("title") || "").replace(/\s*\(存在しないページ\)/g, "").trim();
+      const detected = detectTypesFromText(linkText + " " + titleAttr);
+      return {
+        text: linkText,
+        wikiTitle: titleAttr || linkText,
+        types: detected
+      };
+    });
+
+    const defaultWiki = linkInfos.length > 0 ? linkInfos[0].wikiTitle : rawName;
+
+    // 各バッジ種別ごとに最適なリンク先Wikipedia記事を割り当て
+    const badgeItems = types.map(t => {
+      // 該当種別を持つリンクを探す
+      const exactMatch = linkInfos.find(info => info.types.includes(t));
+      if (exactMatch) {
+        return {
+          type: t,
+          wikiTitle: exactMatch.wikiTitle,
+          label: exactMatch.text || exactMatch.wikiTitle
+        };
+      }
+      // リンクが1つしかなく併設（例：〇〇PAにスマートIC併設でスマートIC側の記事名が推測できる場合）
+      const baseName = rawName
+        .replace(/(スマートIC|SIC|JCT|ジャンクション|IC|インターチェンジ|SA|サービスエリア|PA|パーキングエリア|TB|本線料金所|料金所|TN|トンネル|BS|バスストップ|バス停留所)/gi, "")
+        .replace(/[\/・／（）()]+/g, "")
+        .trim();
+
+      if (t === "PA" && baseName) {
+        return { type: "PA", wikiTitle: `${baseName}パーキングエリア`, label: `${baseName}PA` };
+      }
+      if (t === "SA" && baseName) {
+        return { type: "SA", wikiTitle: `${baseName}サービスエリア`, label: `${baseName}SA` };
+      }
+      if (t === "SIC" && baseName) {
+        return { type: "SIC", wikiTitle: `${baseName}スマートインターチェンジ`, label: `${baseName}SIC` };
+      }
+      if (t === "IC" && baseName) {
+        return { type: "IC", wikiTitle: `${baseName}インターチェンジ`, label: `${baseName}IC` };
+      }
+      if (t === "JCT" && baseName) {
+        return { type: "JCT", wikiTitle: `${baseName}ジャンクション`, label: `${baseName}JCT` };
+      }
+      return {
+        type: t,
+        wikiTitle: defaultWiki,
+        label: rawName
+      };
+    });
+
     // 表示用の短い施設名（例：「横浜青葉JCT/IC」→「横浜青葉」）
-    let shortName = text
-      .replace(/(スマートIC|SIC|JCT|ジャンクション|IC|インターチェンジ|SA|サービスエリア|PA|パーキングエリア|TB|本線料金所|料金所|TN|トンネル|BS|バスストップ)/gi, "")
+    let shortName = rawName
+      .replace(/(スマートIC|SIC|JCT|ジャンクション|IC|インターチェンジ|SA|サービスエリア|PA|パーキングエリア|TB|本線料金所|料金所|TN|トンネル|BS|バスストップ|バス停留所)/gi, "")
       .replace(/[\/・／]+$/g, "")
       .replace(/^[\/・／]+/g, "")
+      .replace(/\s*[\/・／]\s*/g, "・")
       .trim();
 
-    if (!shortName) shortName = text;
+    if (!shortName) shortName = rawName;
 
-    return { types, shortName, fullName: text };
+    return {
+      types,
+      badgeItems,
+      shortName,
+      fullName: rawName,
+      wikiTitle: defaultWiki
+    };
   }
 
   /**
@@ -169,7 +289,6 @@ const WikiParser = (() => {
       infobox: extractInfobox(doc)
     };
 
-    // 1. 「インターチェンジなど」の表を解析
     const icElements = getElementsUnderHeading(doc, ["インターチェンジなど", "出入口", "インターチェンジ一覧"], "H2");
     let interchanges = [];
     const icTable = icElements.map(el => el.tagName === "TABLE" ? el : el.querySelector("table.wikitable")).find(Boolean);
@@ -178,7 +297,6 @@ const WikiParser = (() => {
       interchanges = parseInterchangeTable(icTable);
     }
 
-    // 2. 「路線状況」の車線・最高速度とテキスト解説を解析
     const statusElements = getElementsUnderHeading(doc, ["路線状況"], "H2");
     const status = parseRouteStatus(statusElements);
 
@@ -191,21 +309,22 @@ const WikiParser = (() => {
   }
 
   /**
-   * Wikipediaの「インターチェンジなど」wikitable を解析
+   * Wikipediaの「インターチェンジなど」wikitable をグリッド展開して正確に解析
    */
   function parseInterchangeTable(table) {
-    const rows = Array.from(table.querySelectorAll("tr"));
-    if (rows.length < 2) return [];
+    const grid = expandTableToGrid(table);
+    if (grid.length < 2) return [];
 
-    // ヘッダー列の位置を特定
-    const headerCells = Array.from(rows[0].querySelectorAll("th, td")).map(c => cleanText(c.textContent));
-    let idxNum = headerCells.findIndex(h => /番号/.test(h));
-    let idxName = headerCells.findIndex(h => /施設名|名称|なまえ/.test(h));
-    let idxConnect = headerCells.findIndex(h => /接続路線/.test(h));
-    let idxKm = headerCells.findIndex(h => /キロ|距離|起点/.test(h));
-    let idxNote = headerCells.findIndex(h => /備考/.test(h));
+    // ヘッダー行（最初の行）から列インデックスを特定
+    const headerRow = grid[0] || [];
+    const headerTexts = headerRow.map(slot => slot ? cleanText(slot.cell.textContent) : "");
 
-    // デフォルト列位置フォールバック（Wikipedia標準形式）
+    let idxNum = headerTexts.findIndex(h => /番号/.test(h));
+    let idxName = headerTexts.findIndex(h => /施設名|名称|なまえ/.test(h));
+    let idxConnect = headerTexts.findIndex(h => /接続路線/.test(h));
+    let idxKm = headerTexts.findIndex(h => /キロ|距離|起点/.test(h));
+    let idxNote = headerTexts.findIndex(h => /備考/.test(h));
+
     if (idxNum === -1) idxNum = 0;
     if (idxName === -1) idxName = 1;
     if (idxConnect === -1) idxConnect = 2;
@@ -214,59 +333,60 @@ const WikiParser = (() => {
 
     const list = [];
 
-    for (let i = 1; i < rows.length; i++) {
-      const cells = Array.from(rows[i].querySelectorAll("th, td"));
-      if (cells.length < 2) continue;
+    for (let r = 1; r < grid.length; r++) {
+      const row = grid[r];
+      if (!row || row.length < 2) continue;
 
-      // 県境行などのcolspan見出し行をスキップ
-      const firstColspan = parseInt(cells[0].getAttribute("colspan") || "1", 10);
-      if (firstColspan >= 4) continue;
+      // 県境行など、1つのセルが横4列以上にまたがる見出し行はスキップ
+      if (row[0] && row[0].colspan >= 4) continue;
 
-      const numRaw = cleanText(cells[idxNum]?.textContent || "");
-      const nameCell = cells[idxName];
-      if (!nameCell) continue;
+      const nameSlot = row[idxName];
+      if (!nameSlot || !nameSlot.cell) continue;
 
-      const nameRaw = cleanText(nameCell.textContent);
-      if (!nameRaw || nameRaw === "-" || nameRaw === "―") continue;
+      // 施設名セル自体が前の行からのrowspan継続であり、かつ備考等だけの補足行である場合はスキップ
+      if (!nameSlot.isOrigin) continue;
 
-      // リンク先Wikipedia記事タイトルを取得
-      const linkEl = nameCell.querySelector("a[title]");
-      let wikiTarget = linkEl ? linkEl.getAttribute("title") : nameRaw;
-      // 赤リンク等の注釈除去
-      wikiTarget = wikiTarget.replace(/\s*\(存在しないページ\)/g, "").trim();
+      const parsedFacility = parseFacilityCell(nameSlot.cell);
+      if (!parsedFacility.fullName || parsedFacility.fullName === "-" || parsedFacility.fullName === "―") {
+        continue;
+      }
 
-      const { types, shortName, fullName } = detectFacilityTypesAndName(nameRaw);
+      const numRaw = row[idxNum] ? cleanText(row[idxNum].cell.textContent) : "-";
+      // IC番号欄に万が一長文が入っている場合は "-" に正規化
+      const safeNum = (numRaw === "-" || numRaw === "―" || numRaw.length > 10) ? "-" : numRaw;
 
-      // キロ程整形（数値のみなら km を付与）
-      let kmRaw = cleanText(cells[idxKm]?.textContent || "");
-      if (kmRaw && /^[0-9.]+$/.test(kmRaw)) {
+      // キロ程整形
+      let kmRaw = row[idxKm] ? cleanText(row[idxKm].cell.textContent) : "";
+      if (kmRaw === "-" || kmRaw === "―") {
+        kmRaw = "";
+      } else if (kmRaw && /^[0-9.]+$/.test(kmRaw)) {
         kmRaw = kmRaw + "km";
       } else if (kmRaw && /[0-9]/.test(kmRaw) && !/km/i.test(kmRaw)) {
         kmRaw = kmRaw.replace(/([0-9]+(?:\.[0-9]+)?)/g, "$1km");
       }
 
-      const connectRaw = cleanText(cells[idxConnect]?.textContent || "");
-      const noteRaw = cleanText(cells[idxNote]?.textContent || "");
+      const connectRaw = row[idxConnect] ? cleanText(row[idxConnect].cell.textContent) : "";
+      const noteRaw = row[idxNote] ? cleanText(row[idxNote].cell.textContent) : "";
 
-      // 備考から「事業中」「建設中」「予定」などを優先抽出
       let shortNote = "";
       if (/事業中|建設中|予定|未開通/.test(noteRaw)) {
         const m = noteRaw.match(/(事業中|建設中|予定|未開通)/);
         shortNote = m ? m[1] : "";
-      } else if (noteRaw.length > 0 && noteRaw.length <= 16) {
+      } else if (noteRaw.length > 0 && noteRaw.length <= 16 && noteRaw !== "-" && noteRaw !== "―") {
         shortNote = noteRaw;
       }
 
       list.push({
-        num: numRaw === "-" || numRaw === "―" ? "-" : numRaw,
-        types,
-        shortName,
-        fullName,
-        wikiTitle: wikiTarget,
+        num: safeNum,
+        types: parsedFacility.types,
+        badgeItems: parsedFacility.badgeItems,
+        shortName: parsedFacility.shortName,
+        fullName: parsedFacility.fullName,
+        wikiTitle: parsedFacility.wikiTitle,
         km: kmRaw,
         note: shortNote,
-        fullNote: noteRaw,
-        connect: connectRaw === "-" || connectRaw === "―" ? "" : connectRaw
+        fullNote: (noteRaw === "-" || noteRaw === "―") ? "" : noteRaw,
+        connect: (connectRaw === "-" || connectRaw === "―") ? "" : connectRaw
       });
     }
 
@@ -280,21 +400,19 @@ const WikiParser = (() => {
     const laneSpeedRows = [];
     const proseSections = [];
 
-    // 表を探す
     const table = elements.map(el => el.tagName === "TABLE" ? el : el.querySelector("table.wikitable")).find(Boolean);
     if (table) {
-      const trs = Array.from(table.querySelectorAll("tr"));
+      const grid = expandTableToGrid(table);
       let prevSpeedKey = "";
 
-      for (let i = 1; i < trs.length; i++) {
-        const tds = Array.from(trs[i].querySelectorAll("th, td"));
-        if (tds.length < 2) continue;
+      for (let r = 1; r < grid.length; r++) {
+        const row = grid[r];
+        if (!row || row.length < 2) continue;
 
-        const sectionText = cleanText(tds[0]?.textContent || "");
+        const sectionText = row[0] ? cleanText(row[0].cell.textContent) : "";
         if (!sectionText || sectionText.includes("区間")) continue;
 
-        // 車線数（例: "6 (3+3)" や "4 (2+2)" や "8 (4+4)" や "暫定2 (1+1)"）
-        const laneCellText = cleanText(tds[1]?.textContent || "");
+        const laneCellText = row[1] ? cleanText(row[1].cell.textContent) : "";
         let upLanes = 2;
         let downLanes = 2;
         const plusMatch = laneCellText.match(/(\d)\s*[\+＋]\s*(\d)/);
@@ -310,8 +428,7 @@ const WikiParser = (() => {
           }
         }
 
-        // 最高速度セル（例: "大型90km/h / 普通100km/h" や "100km/h"）
-        const speedCellText = cleanText(tds[2]?.textContent || "");
+        const speedCellText = row[2] ? cleanText(row[2].cell.textContent) : "";
         const speeds = parseSpeedText(speedCellText);
         const speedKey = JSON.stringify(speeds);
 
@@ -327,7 +444,6 @@ const WikiParser = (() => {
       }
     }
 
-    // 見出しと段落を抽出（インターチェンジ、サービスエリア・パーキングエリア等）
     let currentSub = null;
     for (const el of elements) {
       const isH3 = el.tagName === "H3" || el.classList.contains("mw-heading3");
@@ -336,7 +452,7 @@ const WikiParser = (() => {
           proseSections.push(currentSub);
         }
         currentSub = {
-          title: cleanText(el.textContent),
+          title: cleanHeadingText(el),
           paragraphs: []
         };
       } else if (el.tagName === "P" && currentSub) {
@@ -360,7 +476,6 @@ const WikiParser = (() => {
     if (!text) return [];
     const results = [];
 
-    // パターン1: 大型・大型貨物・左記以外（または普通車）
     const largeMatch = text.match(/大型[^0-9]{0,6}(\d{2,3})/);
     const cargoMatch = text.match(/(?:大型貨物|特定中型)[^0-9]{0,6}(\d{2,3})/);
     const otherMatch = text.match(/(?:左記以外|普通|小型|その他)[^0-9]{0,6}(\d{2,3})/);
@@ -372,7 +487,6 @@ const WikiParser = (() => {
       return results;
     }
 
-    // パターン2: 単一の速度表記（例: "100km/h", "80km/h"）
     const singleMatch = text.match(/(\d{2,3})\s*km/i) || text.match(/(\d{2,3})/);
     if (singleMatch) {
       results.push({ label: "最高速度", speed: singleMatch[1] });
@@ -381,7 +495,7 @@ const WikiParser = (() => {
   }
 
   /**
-   * 施設詳細ページ（PA/SA および IC/JCT）のHTML解析
+   * 施設詳細ページ（PA/SA および IC/JCT/BS）のHTML解析
    */
   function parseFacilityPage(htmlString, isSapa) {
     const parser = new DOMParser();
@@ -414,12 +528,25 @@ const WikiParser = (() => {
   }
 
   /**
-   * SA/PA記事の「施設」セクションを方面別に解析（画像3準拠）
+   * SA/PA記事の「施設」セクションを方面別に解析（[編集]除去・ネスト駐車場台数・表形式対応）
    */
   function parseSapaFacilities(doc) {
     const facilityElems = getElementsUnderHeading(doc, ["施設"], "H2");
     const directions = [];
     let currentDir = null;
+
+    const createDir = (title) => ({
+      title,
+      largeParking: null,
+      smallParking: null,
+      hasToilet: false,
+      hasEv: false,
+      hasGs: false,
+      hasInfo: false,
+      hasVending: false,
+      categories: [],
+      others: []
+    });
 
     const pushCurrent = () => {
       if (currentDir) {
@@ -428,47 +555,33 @@ const WikiParser = (() => {
     };
 
     for (const el of facilityElems) {
-      const isH3 = el.tagName === "H3" || el.classList.contains("mw-heading3");
-      if (isH3) {
+      const isHeading =
+        el.tagName === "H3" ||
+        el.tagName === "H4" ||
+        el.classList.contains("mw-heading3") ||
+        el.classList.contains("mw-heading4");
+
+      if (isHeading) {
         pushCurrent();
-        currentDir = {
-          title: cleanText(el.textContent),
-          largeParking: null,
-          smallParking: null,
-          hasToilet: false,
-          hasEv: false,
-          hasGs: false,
-          hasInfo: false,
-          categories: [],
-          others: []
-        };
+        currentDir = createDir(cleanHeadingText(el));
         continue;
       }
 
       if (!currentDir) {
-        // H3見出しなしでいきなり箇条書きが始まるPA/SA用
-        currentDir = {
-          title: "施設一覧",
-          largeParking: null,
-          smallParking: null,
-          hasToilet: false,
-          hasEv: false,
-          hasGs: false,
-          hasInfo: false,
-          categories: [],
-          others: []
-        };
+        currentDir = createDir("施設一覧");
       }
 
       if (el.tagName === "UL") {
         parseSapaListItems(el, currentDir);
+      } else if (el.tagName === "TABLE") {
+        // テーブル形式で上下線・設備が書かれているPA/SA記事への対応
+        parseSapaTable(el, currentDir);
       }
     }
     pushCurrent();
 
-    // 空のデフォルトブロックを除外
     return directions.filter(d =>
-      d.largeParking || d.smallParking || d.hasToilet || d.hasEv || d.hasGs ||
+      d.largeParking || d.smallParking || d.hasToilet || d.hasEv || d.hasGs || d.hasInfo || d.hasVending ||
       d.categories.length > 0 || d.others.length > 0
     );
   }
@@ -478,22 +591,31 @@ const WikiParser = (() => {
 
     for (const li of topLis) {
       const nestedUl = li.querySelector("ul");
-      // 親LIのテキスト（子ULを除く）
       const cloneLi = li.cloneNode(true);
       cloneLi.querySelectorAll("ul").forEach(u => u.remove());
       const lineText = cleanText(cloneLi.textContent);
 
-      // 駐車場台数抽出
+      // 子ULのテキストも結合して駐車台数や設備を漏らさずチェック
+      const subTexts = nestedUl
+        ? Array.from(nestedUl.querySelectorAll("li")).map(s => cleanText(s.textContent)).filter(Boolean)
+        : [];
+      const combinedText = [lineText, ...subTexts].join(" ");
+
+      // 1. 駐車場台数抽出（親LI・子ULどちらに書かれていても取得）
       if (/駐車場/.test(lineText)) {
-        const largeM = lineText.match(/大型\s*([0-9,]+)\s*台/);
-        const smallM = lineText.match(/小型\s*([0-9,]+)\s*台/);
+        const largeM = combinedText.match(/大型[^0-9]{0,5}([0-9,]+)\s*台/);
+        const smallM = combinedText.match(/小型[^0-9]{0,5}([0-9,]+)\s*台/);
         if (largeM) dirObj.largeParking = largeM[1] + "台";
         if (smallM) dirObj.smallParking = smallM[1] + "台";
+        // 駐車台数が取れなかった場合のみその他へ
+        if (!largeM && !smallM && subTexts.length > 0) {
+          dirObj.others.push(`駐車場（${subTexts.join(" / ")}）`);
+        }
         continue;
       }
 
-      // トイレ・EV・ガソリンスタンド・インフォメーション判定
-      if (/トイレ/.test(lineText)) {
+      // 2. トイレ・EV・ガソリンスタンド・案内所・自販機判定
+      if (/^トイレ|お手洗い/.test(lineText)) {
         dirObj.hasToilet = true;
         continue;
       }
@@ -501,37 +623,59 @@ const WikiParser = (() => {
         dirObj.hasEv = true;
         continue;
       }
-      if (/ガソリンスタンド|給油所|ENEOS|出光|コスモ|シェル/.test(lineText)) {
+      if (/ガソリンスタンド|給油所|ENEOS|出光|コスモ|シェル|apollostation/.test(lineText)) {
         dirObj.hasGs = true;
         continue;
       }
-      if (/インフォメーション|案内所|コンシェルジュ/.test(lineText)) {
+      if (/インフォメーション|案内所|コンシェルジュ|ハイウェイ情報/.test(lineText)) {
         dirObj.hasInfo = true;
         continue;
       }
+      if (/自動販売機/.test(lineText)) {
+        dirObj.hasVending = true;
+        continue;
+      }
 
-      // 店舗カテゴリ判定
+      // 3. 店舗カテゴリ判定
       const catType = detectShopCategory(lineText);
-      const is24h = /24時間/.test(lineText);
+      const is24h = /24時間/.test(combinedText);
 
-      if (catType !== "other" || nestedUl) {
-        const subItems = [];
-        if (nestedUl) {
-          nestedUl.querySelectorAll("li").forEach(subLi => {
-            const subTxt = cleanText(subLi.textContent);
-            if (subTxt) subItems.push(subTxt);
-          });
-        }
+      if (catType !== "other" || subTexts.length > 0) {
         dirObj.categories.push({
           catType,
           title: lineText,
           is24h,
-          items: subItems
+          items: subTexts
         });
       } else if (lineText) {
         dirObj.others.push(lineText);
       }
     }
+  }
+
+  function parseSapaTable(table, dirObj) {
+    table.querySelectorAll("tr").forEach(tr => {
+      const cells = Array.from(tr.querySelectorAll("th, td")).map(c => cleanText(c.textContent));
+      if (cells.length < 2) return;
+      const label = cells[0];
+      const val = cells.slice(1).join(" / ");
+      if (!label || !val) return;
+
+      if (/駐車場/.test(label)) {
+        const largeM = val.match(/大型[^0-9]{0,5}([0-9,]+)\s*台/);
+        const smallM = val.match(/小型[^0-9]{0,5}([0-9,]+)\s*台/);
+        if (largeM && !dirObj.largeParking) dirObj.largeParking = largeM[1] + "台";
+        if (smallM && !dirObj.smallParking) dirObj.smallParking = smallM[1] + "台";
+      } else if (/トイレ/.test(label)) {
+        dirObj.hasToilet = true;
+      } else if (/給油|ガソリン/.test(label)) {
+        dirObj.hasGs = true;
+      } else if (/充電|EV/.test(label)) {
+        dirObj.hasEv = true;
+      } else {
+        dirObj.others.push(`${label}：${val}`);
+      }
+    });
   }
 
   function detectShopCategory(text) {
@@ -540,12 +684,12 @@ const WikiParser = (() => {
     if (/ショッピング|お土産|売店/.test(text)) return "shopping";
     if (/カフェ|喫茶|スターバックス|タリーズ/.test(text)) return "cafe";
     if (/レストラン|食堂/.test(text)) return "restaurant";
-    if (/コンビニ|セブン|ローソン|ファミリーマート/.test(text)) return "convenience";
+    if (/コンビニ|セブン|ローソン|ファミリーマート|デイリーヤマザキ/.test(text)) return "convenience";
     return "other";
   }
 
   /**
-   * IC / JCT 記事の「接続する道路」「歴史」「周辺」を解析
+   * IC / JCT / BS 記事の「接続する道路」「歴史」を解析
    */
   function parseIcJctDetail(doc) {
     const roadElems = getElementsUnderHeading(doc, ["接続する道路", "接続道路"], "H2");
@@ -557,11 +701,8 @@ const WikiParser = (() => {
           const text = cleanText(li.textContent);
           if (!text) return;
 
-          // 国道番号抽出
           const natMatch = text.match(/国道(\d+)号/);
-          // 都道府県道番号抽出
           const prefMatch = text.match(/(?:都|道|府|県)道(\d+)号/);
-          // 高速道路名抽出
           const hwMatch = text.match(/(E\d+[A-Z]?|C\d+)\s*([^（(\s]+)/);
 
           if (natMatch) {
