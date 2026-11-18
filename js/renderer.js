@@ -13,22 +13,36 @@ const WikiRenderer = (() => {
 
   /**
    * 施設種別バッジ（IC / JCT / PA / SA / SIC / BS 等）のHTML生成
+ /**
+   * 施設種別アイコンバッジ群を生成（複数併設時は個別クリック可能）
    */
-  function renderFacilityBadges(types, badgeItems = null, clickable = false) {
-    const validClasses = ["ic", "jct", "sa", "pa", "sic", "bs", "tb", "tn"];
+  function renderFacilityBadges(types, badgeItems = null, interactive = false) {
+    const safeTypes = Array.isArray(types) && types.length > 0 ? types : ["IC"];
+    const items = Array.isArray(badgeItems) && badgeItems.length > 0
+      ? badgeItems
+      : safeTypes.map(t => ({ type: t, wikiTitle: "", label: "", shortName: "", isInactive: false }));
 
-    if (Array.isArray(badgeItems) && badgeItems.length > 0) {
-      const badgesHtml = badgeItems.map(b => {
-        const lower = (b.type || "").toLowerCase();
-        const cls = validClasses.includes(lower) ? lower : "other";
-        const clickCls = clickable ? "clickable-badge" : "";
-        const dataAttrs = clickable
-          ? `data-wiki="${escapeHtml(b.wikiTitle)}" data-type="${escapeHtml(b.type)}" data-label="${escapeHtml(b.label)}" data-short="${escapeHtml(b.shortName || "")}" title="${escapeHtml(b.label)} の詳細へ移動"`
-          : "";
-        return `<span class="f-badge ${cls} ${clickCls}" ${dataAttrs}>${escapeHtml(b.type)}</span>`;
-      }).join("");
-      return `<span class="facility-badges">${badgesHtml}</span>`;
-    }
+    const badgesHtml = items.map(item => {
+      const t = item.type;
+      const cls = BADGE_CLASS_MAP[t] || "badge-ic";
+      const label = BADGE_LABEL_MAP[t] || t;
+      const inactiveCls = item.isInactive ? " f-badge-inactive" : "";
+      if (interactive && item.wikiTitle) {
+        const statusSuffix = item.isInactive ? "（事業中・未開通/廃止）" : "";
+        return `<span class="f-badge ${cls}${inactiveCls} clickable-badge"
+                      role="button"
+                      tabindex="0"
+                      data-wiki="${escapeHtml(item.wikiTitle)}"
+                      data-type="${escapeHtml(t)}"
+                      data-label="${escapeHtml(item.label || "")}"
+                      data-short="${escapeHtml(item.shortName || "")}"
+                      title="${escapeHtml((item.label || t) + statusSuffix)} の詳細を見る">${escapeHtml(label)}</span>`;
+      }
+      return `<span class="f-badge ${cls}${inactiveCls}">${escapeHtml(label)}</span>`;
+    }).join("");
+
+    return `<span class="facility-badges">${badgesHtml}</span>`;
+  }
 
     const list = Array.isArray(types) && types.length > 0 ? types : ["IC"];
     const badgesHtml = list.map(t => {
