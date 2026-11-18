@@ -164,9 +164,6 @@ async function initIndexPage() {
     kyushu: "九州・沖縄地方の高速道路"
   };
 
-  /**
-   * カタカナ→ひらがな、全角英数字→半角、スペース除去で表記ゆれを吸収
-   */
   function normalizeSearchText(str) {
     return String(str || "")
       .toLowerCase()
@@ -314,6 +311,7 @@ async function initRoutePage() {
   const routeName = params.get("name") || "東名高速道路";
   const wikiTitle = params.get("wiki") || routeName;
   let activeTab = params.get("tab") || "interchanges";
+  let activeBranchFilter = "all";
 
   document.title = `${routeNum} ${routeName} - 高速道路Wikipediaガイド`;
   const numBadge = document.getElementById("routeNumBadge");
@@ -337,18 +335,16 @@ async function initRoutePage() {
     });
   }
 
-  /**
-   * 施設詳細画面へ遷移（ICとBS併設時でもメイン施設の個別名・個別種別を正しく渡す）
-   */
   function goToFacility(item, idx, overrideBadge = null) {
     const primary = overrideBadge || item.primaryBadge || (item.badgeItems && item.badgeItems[0]);
     const targetWiki = primary ? primary.wikiTitle : item.wikiTitle;
     const targetTypes = primary ? [primary.type] : [item.types[0] || "IC"];
     const targetFullName = primary ? primary.label : item.fullName;
     const targetShortName = (primary && primary.shortName) ? primary.shortName : item.shortName;
+    const effectiveRouteNum = item.sectionRouteNum || routeNum;
 
     const fParams = new URLSearchParams({
-      routeNum,
+      routeNum: effectiveRouteNum,
       routeName,
       routeWiki: wikiTitle,
       index: String(idx),
@@ -362,9 +358,6 @@ async function initRoutePage() {
     location.href = `facility.html?${fParams.toString()}`;
   }
 
-  /**
-   * 接続路線セルのHTML生成（高速道路が含まれる場合はクリック可能なリンクボタンにする）
-   */
   function renderConnectCell(item) {
     const links = Array.isArray(item.connectLinks) ? item.connectLinks : [];
     const lines = Array.isArray(item.connectLines) && item.connectLines.length > 0
@@ -378,7 +371,6 @@ async function initRoutePage() {
       return WikiRenderer.escapeHtml(item.connect || "");
     }
 
-    // 高速道路リンクチップ + 一般道テキストの併用表示
     const hwChipsHtml = links.map(lk => {
       const matched = routesMaster.find(r => r.wikiTitle === lk.wikiTitle || r.name === lk.name);
       const dispNum = lk.num || (matched ? matched.number : "");
@@ -395,7 +387,6 @@ async function initRoutePage() {
       `;
     }).join("");
 
-    // 高速道路名以外の一般道テキストがあれば残す
     const nonHwLines = lines.filter(ln => !links.some(lk => ln.includes(lk.name)));
     const nonHwHtml = nonHwLines.length > 0
       ? `<div style="margin-top: 2px;">${nonHwLines.map(l => WikiRenderer.escapeHtml(l)).join(" / ")}</div>`
@@ -425,7 +416,54 @@ async function initRoutePage() {
 
       sessionStorage.setItem("hw_current_ic_list", JSON.stringify(list));
 
+      // 区間・支線・連絡路・ナンバリング変化のグループを抽出
+      const sectionGroups = [];
+      const seenGroupKeys = new Set();
+      for (const item of list) {
+        const gKey = `${item.sectionRouteNum || ""}::${item.sectionTitle || "本線"}`;
+        if (!seenGroupKeys.has(gKey)) {
+          seenGroupKeys.add(gKey);
+          sectionGroups.push({
+            key: gKey,
+            title: item.sectionTitle || "本線",
+            routeNum: item.sectionRouteNum || ""
+          });
+        }
+      }
+
+      const branchTabsHtml = sectionGroups.length > 1 ? `
+        <div class="ic-branch-tabs" aria-label="区間・支線切替">
+          <button type="button" class="ic-branch-tab-btn ${activeBranchFilter === "all" ? "active" : ""}" data-branch-key="all">
+            <span>すべて表示（${list.length}）</span>
+          </button>
+          ${sectionGroups.map(g => `
+            <button type="button" class="ic-branch-tab-btn ${activeBranchFilter === g.key ? "active" : ""}" data-branch-key="${WikiRenderer.escapeHtml(g.key)}">
+              ${g.routeNum ? `<span class="ic-branch-tab-num">${WikiRenderer.escapeHtml(g.routeNum)}</span>` : ""}
+              <span>${WikiRenderer.escapeHtml(g.title)}</span>
+            </button>
+          `).join("")}
+        </div>
+      ` : "";
+
+      let lastRenderedGroupKey = "";
       const rowsHtml = list.map((item, idx) => {
+        const gKey = `${item.sectionRouteNum || ""}::${item.sectionTitle || "本線"}`;
+        if (activeBranchFilter !== "all" && activeBranchFilter !== gKey) {
+          return "";
+        }
+
+        let dividerHtml = "";
+        if (sectionGroups.length > 1 && gKey !== lastRenderedGroupKey) {
+          lastRenderedGroupKey = gKey;
+          const badgeNum = item.sectionRouteNum || routeNum;
+          dividerHtml = `
+            <div class="ic-section-divider">
+              ${badgeNum ? `<span class="route-num-badge">${WikiRenderer.escapeHtml(badgeNum)}</span>` : ""}
+              <span>${WikiRenderer.escapeHtml(item.sectionTitle || "本線")}</span>
+            </div>
+          `;
+        }
+
         const kmHtml = (item.kmLines && item.kmLines.length > 1)
           ? `<div class="multi-line-cell">${item.kmLines.map(k => `<span class="multi-line-item">${WikiRenderer.escapeHtml(k)}</span>`).join("")}</div>`
           : WikiRenderer.escapeHtml(item.km);
@@ -434,8 +472,11 @@ async function initRoutePage() {
           ? `<div class="multi-line-cell">${item.noteLines.map(n => `<span class="multi-line-item">${WikiRenderer.escapeHtml(n)}</span>`).join("")}</div>`
           : WikiRenderer.escapeHtml(item.note);
 
+        const inactiveCls = item.isInactive ? "ic-row-inactive" : "";
+
         return `
-          <div class="ic-row-card" data-index="${idx}" role="button" tabindex="0">
+          ${dividerHtml}
+          <div class="ic-row-card ${inactiveCls}" data-index="${idx}" role="button" tabindex="0">
             <div class="ic-col-num">${WikiRenderer.escapeHtml(item.num)}</div>
             <div class="ic-col-name">
               ${WikiRenderer.renderFacilityBadges(item.types, item.badgeItems, true)}
@@ -448,7 +489,41 @@ async function initRoutePage() {
         `;
       }).join("");
 
+      // つづき・直結路線リンク（ICリスト最下部）
+      const continuations = Array.isArray(parsedData.continuations) ? parsedData.continuations : [];
+      const continuationHtml = continuations.length > 0 ? `
+        <section class="route-continuation-box" aria-label="つづき・直結路線">
+          <div class="route-continuation-header">
+            <span>つづき・接続する高速道路（直結・連続路線）</span>
+          </div>
+          <div class="route-continuation-list">
+            ${continuations.map(c => {
+              const matched = routesMaster.find(r => r.wikiTitle === c.wikiTitle || r.name === c.name);
+              const dispNum = c.num || (matched ? matched.number : "HW");
+              const dispName = matched ? matched.name : c.name;
+              const dispWiki = matched ? matched.wikiTitle : c.wikiTitle;
+              return `
+                <div class="route-continuation-card"
+                     role="button"
+                     tabindex="0"
+                     data-hw-num="${WikiRenderer.escapeHtml(dispNum)}"
+                     data-hw-name="${WikiRenderer.escapeHtml(dispName)}"
+                     data-hw-wiki="${WikiRenderer.escapeHtml(dispWiki)}">
+                  <div class="route-continuation-left">
+                    <span class="route-num-badge">${WikiRenderer.escapeHtml(dispNum)}</span>
+                    <span class="route-continuation-name">${WikiRenderer.escapeHtml(dispName)}</span>
+                    <span class="route-continuation-note">（${WikiRenderer.escapeHtml(c.note)}）</span>
+                  </div>
+                  <span class="hw-jump-arrow">この道路へ進む ↗</span>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        </section>
+      ` : "";
+
       mainContent.innerHTML = `
+        ${branchTabsHtml}
         <div class="ic-table-header">
           <div>IC番号</div>
           <div>なまえ</div>
@@ -459,8 +534,47 @@ async function initRoutePage() {
         <div class="ic-list-container">
           ${rowsHtml}
         </div>
+        ${continuationHtml}
       `;
 
+      // 区間・支線タブクリック
+      mainContent.querySelectorAll(".ic-branch-tab-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          activeBranchFilter = btn.dataset.branchKey;
+          renderCurrentTab();
+        });
+      });
+
+      // つづき・直結路線カードクリック＆ホバー
+      mainContent.querySelectorAll(".route-continuation-card").forEach(card => {
+        const hwNum = card.dataset.hwNum;
+        const hwName = card.dataset.hwName;
+        const hwWiki = card.dataset.hwWiki;
+
+        const goCont = () => navigateToHighwayRoute({ num: hwNum, name: hwName, wikiTitle: hwWiki });
+        card.addEventListener("click", goCont);
+        card.addEventListener("keydown", e => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            goCont();
+          }
+        });
+
+        card.addEventListener("mouseenter", e => {
+          WikiHoverPreview.show({
+            key: `cont_hw_${hwWiki}`,
+            title: `${hwNum !== "HW" ? `[${hwNum}] ` : ""}${hwName}`,
+            metaLines: ["つづき・直結する高速道路"],
+            wikiTitle: hwWiki,
+            hintText: `クリックで「${hwName}」の路線ページへ移動`,
+            event: e
+          });
+        });
+        card.addEventListener("mousemove", e => WikiHoverPreview.move(e));
+        card.addEventListener("mouseleave", () => WikiHoverPreview.hide());
+      });
+
+      // 各施設行のイベント登録
       mainContent.querySelectorAll(".ic-row-card").forEach(row => {
         const idx = Number(row.dataset.index);
         const item = list[idx];
@@ -495,7 +609,6 @@ async function initRoutePage() {
         row.addEventListener("mousemove", e => WikiHoverPreview.move(e));
         row.addEventListener("mouseleave", () => WikiHoverPreview.hide());
 
-        // 施設種別バッジ（IC / BS / PA / SIC 等）の個別クリック
         row.querySelectorAll(".clickable-badge").forEach(badgeEl => {
           const bWiki = badgeEl.dataset.wiki;
           const bType = badgeEl.dataset.type;
@@ -525,7 +638,6 @@ async function initRoutePage() {
           });
         });
 
-        // 接続路線列の高速道路リンクボタンのクリック
         row.querySelectorAll(".connect-hw-link").forEach(hwBtn => {
           const hwNum = hwBtn.dataset.hwNum;
           const hwName = hwBtn.dataset.hwName;
@@ -634,7 +746,6 @@ async function initFacilityPage() {
   const isSapa = types.includes("SA") || types.includes("PA");
   const primaryBadge = types[0] || "IC";
 
-  // タイトルプレート名：既に種別サフィックスが含まれていればそのまま、無ければ shortName + primaryBadge（重複防止）
   const hasSuffix = /(IC|JCT|SA|PA|SIC|BS|TB|TN|インターチェンジ|ジャンクション|サービスエリア|パーキングエリア|バスストップ)$/i.test(fullName);
   const plateLabel = hasSuffix ? fullName : `${shortName}${primaryBadge}`;
 
@@ -656,7 +767,6 @@ async function initFacilityPage() {
     location.href = `route.html?${rParams.toString()}`;
   });
 
-  // 前後の施設 ＆ 同じ行の併設施設（例：米原IC と 北陸米原BS）＆ 接続高速道路を取得
   let adjacent = { prev: null, next: null };
   let currentRowItem = null;
   try {
@@ -688,7 +798,6 @@ async function initFacilityPage() {
       return;
     }
 
-    // 併設施設切替バー（例：米原IC と 北陸米原BS が同じ行にある場合）
     let coFacilitiesHtml = "";
     if (currentRowItem && Array.isArray(currentRowItem.badgeItems) && currentRowItem.badgeItems.length > 1) {
       const chips = currentRowItem.badgeItems.map(b => {
@@ -714,7 +823,6 @@ async function initFacilityPage() {
       `;
     }
 
-    // 概要セクションHTML
     const overviewSectionHtml = `
       <section id="sec-facility-overview" class="facility-unified-section">
         <div class="facility-section-banner">
@@ -725,7 +833,6 @@ async function initFacilityPage() {
       </section>
     `;
 
-    // 施設（または接続道路・詳細）セクションHTML
     let detailBodyHtml = "";
     if (parsedFacility.isSapa) {
       const dirs = parsedFacility.sapaDirections;
@@ -758,14 +865,12 @@ async function initFacilityPage() {
       </section>
     `;
 
-    // 1ページに「施設」と「概要」をまとめて連続表示
     mainContent.innerHTML = `
       ${detailSectionHtml}
       <hr class="facility-unified-divider" />
       ${overviewSectionHtml}
     `;
 
-    // 併設施設チップクリックで切り替え
     mainContent.querySelectorAll(".co-facility-chip:not(.active)").forEach(chip => {
       chip.addEventListener("click", () => {
         const nextParams = new URLSearchParams({
@@ -784,7 +889,6 @@ async function initFacilityPage() {
       });
     });
 
-    // JCT/IC詳細画面内の「接続する道路」高速道路カードクリックで該当高速道路ページへ移動
     mainContent.querySelectorAll(".clickable-hw-card").forEach(card => {
       const goHw = () => {
         navigateToHighwayRoute({
@@ -807,7 +911,7 @@ async function initFacilityPage() {
         if (!adjItem) return;
         const primary = adjItem.primaryBadge || (adjItem.badgeItems && adjItem.badgeItems[0]);
         const nextParams = new URLSearchParams({
-          routeNum,
+          routeNum: adjItem.sectionRouteNum || routeNum,
           routeName,
           routeWiki,
           index: String(adjItem.index),
