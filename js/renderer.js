@@ -13,7 +13,6 @@ const WikiRenderer = (() => {
 
   /**
    * 施設種別バッジ（IC / JCT / PA / SA / SIC / BS 等）のHTML生成
-   * badgeItems と clickable=true を渡すとバッジ個別のクリック・ホバーに対応
    */
   function renderFacilityBadges(types, badgeItems = null, clickable = false) {
     const validClasses = ["ic", "jct", "sa", "pa", "sic", "bs", "tb", "tn"];
@@ -41,7 +40,7 @@ const WikiRenderer = (() => {
   }
 
   /**
-   * 路線状況：車線数グラフィック描画（アスファルト＋白破線＋数字）
+   * 路線状況：車線数グラフィック描画
    */
   function renderLanesVisual(upLanes, downLanes) {
     const makeBlock = (count) => {
@@ -63,7 +62,7 @@ const WikiRenderer = (() => {
   }
 
   /**
-   * 路線状況：最高速度標識描画（大型90・大型貨物90・左記以外100 等）
+   * 路線状況：最高速度標識描画
    */
   function renderSpeedSigns(speeds) {
     if (!speeds || speeds.length === 0) return "";
@@ -77,25 +76,78 @@ const WikiRenderer = (() => {
   }
 
   /**
-   * SA / PA 画面：方面別の駐車台数・ピクトグラム・店舗リスト描画
+   * SA / PA 画面：方面別の駐車台数（本線＋一般道ぷらっとパーク分離）・ピクトグラム・店舗リスト描画
    */
   function renderSapaDirection(dir) {
-    const parkingHtml = (dir.largeParking || dir.smallParking) ? `
-      <div class="parking-row">
-        ${dir.largeParking ? `
-          <div class="parking-card" title="大型車駐車台数">
-            <svg viewBox="0 0 24 24"><rect x="1" y="6" width="14" height="10" rx="1.5"></rect><path d="M15 9h4l3 3v4h-7V9z"></path><circle cx="6" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>
-            <span>${escapeHtml(dir.largeParking)}</span>
-          </div>
-        ` : ""}
-        ${dir.smallParking ? `
-          <div class="parking-card" title="小型車駐車台数">
-            <svg viewBox="0 0 24 24"><path d="M5 11l2-5h10l2 5"></path><rect x="3" y="11" width="18" height="6" rx="2"></rect><circle cx="7" cy="18" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg>
-            <span>${escapeHtml(dir.smallParking)}</span>
-          </div>
-        ` : ""}
-      </div>
-    ` : "";
+    const truckSvg = `<svg viewBox="0 0 24 24"><rect x="1" y="6" width="14" height="10" rx="1.5"></rect><path d="M15 9h4l3 3v4h-7V9z"></path><circle cx="6" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>`;
+    const carSvg = `<svg viewBox="0 0 24 24"><path d="M5 11l2-5h10l2 5"></path><rect x="3" y="11" width="18" height="6" rx="2"></rect><circle cx="7" cy="18" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg>`;
+
+    const hasMainParking = dir.largeParking || dir.smallParking || dir.totalParking || dir.handicappedParking;
+    const hasGenParking = Array.isArray(dir.generalParking) && dir.generalParking.length > 0;
+
+    let parkingHtml = "";
+    if (hasMainParking || hasGenParking) {
+      const mainRowHtml = hasMainParking ? `
+        <div class="parking-sub-group">
+          ${hasGenParking ? `<span class="parking-group-badge main-hw">本線駐車枠</span>` : ""}
+          ${dir.largeParking ? `
+            <div class="parking-card" title="大型車駐車台数">
+              ${truckSvg}
+              <span>${escapeHtml(dir.largeParking)}</span>
+            </div>
+          ` : ""}
+          ${dir.smallParking ? `
+            <div class="parking-card" title="小型車駐車台数">
+              ${carSvg}
+              <span>${escapeHtml(dir.smallParking)}</span>
+            </div>
+          ` : ""}
+          ${(!dir.largeParking && !dir.smallParking && dir.totalParking) ? `
+            <div class="parking-card" title="駐車台数">
+              ${carSvg}
+              <span>計 ${escapeHtml(dir.totalParking)}</span>
+            </div>
+          ` : ""}
+          ${dir.handicappedParking ? `
+            <div class="parking-card" title="身障者用駐車台数">
+              <span style="font-size:13px; color:#555;">身障者用</span>
+              <span>${escapeHtml(dir.handicappedParking)}</span>
+            </div>
+          ` : ""}
+        </div>
+      ` : "";
+
+      const genRowsHtml = hasGenParking ? dir.generalParking.map(gp => `
+        <div class="parking-sub-group">
+          <span class="parking-group-badge general-road">${escapeHtml(gp.label || "一般道（ぷらっとパーク）")}</span>
+          ${gp.large ? `
+            <div class="parking-card general-road-card" title="${escapeHtml(gp.label)} 大型車">
+              ${truckSvg}
+              <span>${escapeHtml(gp.large)}</span>
+            </div>
+          ` : ""}
+          ${gp.small ? `
+            <div class="parking-card general-road-card" title="${escapeHtml(gp.label)} 小型車">
+              ${carSvg}
+              <span>${escapeHtml(gp.small)}</span>
+            </div>
+          ` : ""}
+          ${(!gp.large && !gp.small && gp.total) ? `
+            <div class="parking-card general-road-card" title="${escapeHtml(gp.label)} 駐車台数">
+              ${carSvg}
+              <span>${escapeHtml(gp.total)}</span>
+            </div>
+          ` : ""}
+        </div>
+      `).join("") : "";
+
+      parkingHtml = `
+        <div class="parking-section-group">
+          ${mainRowHtml}
+          ${genRowsHtml}
+        </div>
+      `;
+    }
 
     const amenities = [];
     if (dir.hasToilet) {
@@ -201,7 +253,7 @@ const WikiRenderer = (() => {
 
     return `
       <section class="direction-block">
-        <h2 class="direction-title">${escapeHtml(dir.title)}</h2>
+        <h3 class="direction-title">${escapeHtml(dir.title)}</h3>
         ${parkingHtml}
         ${amenityHtml}
         <div class="shop-category-list">${categoriesHtml}</div>
@@ -288,7 +340,7 @@ const WikiRenderer = (() => {
   }
 
   /**
-   * 概要タブ（要約段落 ＋ 基礎情報テーブル）の描画
+   * 概要ブロック（要約段落 ＋ 基礎情報テーブル）の描画
    */
   function renderOverviewTab(overview, title) {
     const paragraphsHtml = overview.paragraphs && overview.paragraphs.length > 0
@@ -314,7 +366,6 @@ const WikiRenderer = (() => {
     return `
       <div class="overview-grid">
         <div class="wiki-prose-block" style="margin-top: 0;">
-          <h3>概要</h3>
           ${paragraphsHtml}
         </div>
         ${infoboxHtml}
