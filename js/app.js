@@ -1,6 +1,98 @@
 /* =========================================================
-   app.js : 各画面の初期化・イベント制御・画面遷移
+   app.js : 各画面の初期化・イベント制御・画面遷移・ホバープレビュー
    ========================================================= */
+
+/**
+ * マウスホバー時のWikipedia概要プレビューカード管理
+ */
+const WikiHoverPreview = (() => {
+  let popoverEl = null;
+  let currentTargetKey = "";
+  let hideTimer = null;
+
+  function ensurePopover() {
+    if (!popoverEl) {
+      popoverEl = document.createElement("div");
+      popoverEl.className = "wiki-hover-popover";
+      document.body.appendChild(popoverEl);
+    }
+    return popoverEl;
+  }
+
+  function positionPopover(clientX, clientY) {
+    const el = ensurePopover();
+    const pad = 16;
+    const rect = el.getBoundingClientRect();
+    const width = rect.width || 330;
+    const height = rect.height || 150;
+
+    let left = clientX + pad;
+    let top = clientY + pad;
+
+    if (left + width > window.innerWidth - 12) {
+      left = Math.max(12, clientX - width - pad);
+    }
+    if (top + height > window.innerHeight - 12) {
+      top = Math.max(12, clientY - height - pad);
+    }
+
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+  }
+
+  async function show({ key, title, types, metaLines, wikiTitle, hintText, event }) {
+    clearTimeout(hideTimer);
+    const el = ensurePopover();
+    currentTargetKey = key;
+
+    const badgesHtml = types ? WikiRenderer.renderFacilityBadges(types) : "";
+    const metaHtml = (metaLines || []).filter(Boolean).map(m => `<div>${WikiRenderer.escapeHtml(m)}</div>`).join("");
+
+    el.innerHTML = `
+      <div class="popover-header">
+        ${badgesHtml}
+        <div class="popover-title">${WikiRenderer.escapeHtml(title)}</div>
+      </div>
+      ${metaHtml ? `<div class="popover-meta">${metaHtml}</div>` : ""}
+      <div class="popover-summary" id="popoverSummaryBody">Wikipediaから概要を読み込み中...</div>
+      <div class="popover-hint">${WikiRenderer.escapeHtml(hintText || "クリックで詳細を表示")}</div>
+    `;
+
+    el.classList.add("visible");
+    if (event) positionPopover(event.clientX, event.clientY);
+
+    if (wikiTitle) {
+      const summaryData = await WikiAPI.fetchPageSummary(wikiTitle);
+      if (currentTargetKey !== key) return;
+      const bodyEl = document.getElementById("popoverSummaryBody");
+      if (bodyEl) {
+        if (summaryData && summaryData.extract) {
+          bodyEl.textContent = summaryData.extract;
+        } else {
+          bodyEl.textContent = "Wikipediaの要約文がまだ登録されていないか、単独記事がありません。";
+        }
+        if (event) positionPopover(event.clientX, event.clientY);
+      }
+    }
+  }
+
+  function move(event) {
+    if (popoverEl && popoverEl.classList.contains("visible")) {
+      positionPopover(event.clientX, event.clientY);
+    }
+  }
+
+  function hide() {
+    hideTimer = setTimeout(() => {
+      currentTargetKey = "";
+      if (popoverEl) {
+        popoverEl.classList.remove("visible");
+      }
+    }, 80);
+  }
+
+  return { show, move, hide };
+})();
 
 document.addEventListener("DOMContentLoaded", () => {
   const pageType = document.body.dataset.page;
@@ -57,7 +149,6 @@ async function initIndexPage() {
   }
 
   function render() {
-    // マップ再描画
     WikiRenderer.renderJapanMap(
       mapWrap,
       routes,
@@ -72,7 +163,6 @@ async function initIndexPage() {
       }
     );
 
-    // フィルタリング
     const q = state.query.trim().toLowerCase();
     const filtered = routes.filter(r => {
       if (state.region !== "all" && !r.region.includes(state.region)) {
@@ -120,10 +210,10 @@ async function initIndexPage() {
     }).join("");
 
     grid.querySelectorAll(".route-card").forEach(card => {
-      const go = () => {
-        const rt = routes.find(x => x.id === card.dataset.id);
-        if (rt) navigateToRoute(rt);
-      };
+      const rt = routes.find(x => x.id === card.dataset.id);
+      if (!rt) return;
+
+      const go = () => navigateToRoute(rt);
       card.addEventListener("click", go);
       card.addEventListener("keydown", e => {
         if (e.key === "Enter" || e.key === " ") {
@@ -131,6 +221,19 @@ async function initIndexPage() {
           go();
         }
       });
+
+      card.addEventListener("mouseenter", e => {
+        WikiHoverPreview.show({
+          key: `route_${rt.id}`,
+          title: `${rt.number} ${rt.name}`,
+          metaLines: [`区間：${rt.section}（総延長 ${rt.length}）`, `管轄：${rt.operator}`],
+          wikiTitle: rt.wikiTitle,
+          hintText: "クリックでIC一覧・路線状況へ",
+          event: e
+        });
+      });
+      card.addEventListener("mousemove", e => WikiHoverPreview.move(e));
+      card.addEventListener("mouseleave", () => WikiHoverPreview.hide());
     });
   }
 
@@ -200,6 +303,26 @@ async function initRoutePage() {
     });
   }
 
+  function goToFacility(item, idx, overrideBadge = null) {
+    const targetWiki = overrideBadge ? overrideBadge.wikiTitle : item.wikiTitle;
+    const targetTypes = overrideBadge ? [overrideBadge.type] : item.types;
+    const targetFullName = overrideBadge ? overrideBadge.label : item.fullName;
+
+    const fParams = new URLSearchParams({
+      routeNum,
+      routeName,
+      routeWiki: wikiTitle,
+      index: String(idx),
+      num: item.num,
+      shortName: item.shortName,
+      fullName: targetFullName,
+      types: targetTypes.join(","),
+      km: item.km,
+      wiki: targetWiki
+    });
+    location.href = `facility.html?${fParams.toString()}`;
+  }
+
   function renderCurrentTab() {
     if (!parsedData) return;
     updateTabUI();
@@ -219,14 +342,13 @@ async function initRoutePage() {
         return;
       }
 
-      // 施設詳細画面で「前の施設・次の施設」移動ができるよう一覧を保存
       sessionStorage.setItem("hw_current_ic_list", JSON.stringify(list));
 
       const rowsHtml = list.map((item, idx) => `
         <div class="ic-row-card" data-index="${idx}" role="button" tabindex="0">
           <div class="ic-col-num">${WikiRenderer.escapeHtml(item.num)}</div>
           <div class="ic-col-name">
-            ${WikiRenderer.renderFacilityBadges(item.types)}
+            ${WikiRenderer.renderFacilityBadges(item.types, item.badgeItems, true)}
             <span>${WikiRenderer.escapeHtml(item.shortName)}</span>
           </div>
           <div class="ic-col-km">${WikiRenderer.escapeHtml(item.km)}</div>
@@ -249,30 +371,64 @@ async function initRoutePage() {
       `;
 
       mainContent.querySelectorAll(".ic-row-card").forEach(row => {
-        const openFacility = () => {
-          const idx = Number(row.dataset.index);
-          const item = list[idx];
-          if (!item) return;
-          const fParams = new URLSearchParams({
-            routeNum,
-            routeName,
-            routeWiki: wikiTitle,
-            index: String(idx),
-            num: item.num,
-            shortName: item.shortName,
-            fullName: item.fullName,
-            types: item.types.join(","),
-            km: item.km,
-            wiki: item.wikiTitle
-          });
-          location.href = `facility.html?${fParams.toString()}`;
-        };
-        row.addEventListener("click", openFacility);
+        const idx = Number(row.dataset.index);
+        const item = list[idx];
+        if (!item) return;
+
+        row.addEventListener("click", () => goToFacility(item, idx, null));
         row.addEventListener("keydown", e => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
-            openFacility();
+            goToFacility(item, idx, null);
           }
+        });
+
+        row.addEventListener("mouseenter", e => {
+          WikiHoverPreview.show({
+            key: `ic_${idx}_${item.wikiTitle}`,
+            title: `${item.num !== "-" ? `[${item.num}] ` : ""}${item.fullName}`,
+            types: item.types,
+            metaLines: [
+              item.km ? `起点から：${item.km}` : "",
+              item.connect ? `接続路線：${item.connect}` : "",
+              item.fullNote ? `備考：${item.fullNote}` : ""
+            ],
+            wikiTitle: item.wikiTitle,
+            hintText: item.badgeItems.length > 1
+              ? "各アイコン（PA/IC等）個別クリックでそれぞれの記事へ移動"
+              : "クリックで詳細ページへ移動",
+            event: e
+          });
+        });
+        row.addEventListener("mousemove", e => WikiHoverPreview.move(e));
+        row.addEventListener("mouseleave", () => WikiHoverPreview.hide());
+
+        row.querySelectorAll(".clickable-badge").forEach(badgeEl => {
+          const bWiki = badgeEl.dataset.wiki;
+          const bType = badgeEl.dataset.type;
+          const bLabel = badgeEl.dataset.label;
+
+          badgeEl.addEventListener("click", e => {
+            e.stopPropagation();
+            goToFacility(item, idx, { wikiTitle: bWiki, type: bType, label: bLabel });
+          });
+
+          badgeEl.addEventListener("mouseenter", e => {
+            e.stopPropagation();
+            WikiHoverPreview.show({
+              key: `badge_${idx}_${bType}_${bWiki}`,
+              title: bLabel,
+              types: [bType],
+              metaLines: [item.km ? `起点から：${item.km}` : ""],
+              wikiTitle: bWiki,
+              hintText: `クリックで「${bType}」の記事へ直接移動`,
+              event: e
+            });
+          });
+          badgeEl.addEventListener("mousemove", e => {
+            e.stopPropagation();
+            WikiHoverPreview.move(e);
+          });
         });
       });
       return;
@@ -314,6 +470,7 @@ async function initRoutePage() {
 
   navItems.forEach(btn => {
     btn.addEventListener("click", () => {
+      WikiHoverPreview.hide();
       activeTab = btn.dataset.tab;
       const newUrl = new URL(location.href);
       newUrl.searchParams.set("tab", activeTab);
@@ -337,7 +494,7 @@ async function initRoutePage() {
 }
 
 /* ---------------------------------------------------------
-   3. 施設詳細画面 (facility.html : PA/SA & IC/JCT 両対応)
+   3. 施設詳細画面 (facility.html : PA/SA & IC/JCT/BS 1ページ統合表示)
    --------------------------------------------------------- */
 async function initFacilityPage() {
   const params = new URLSearchParams(location.search);
@@ -354,7 +511,7 @@ async function initFacilityPage() {
 
   const isSapa = types.includes("SA") || types.includes("PA");
   const primaryBadge = types[0] || "IC";
-  const plateLabel = `${shortName}${primaryBadge}`;
+  const plateLabel = fullName.includes(primaryBadge) ? fullName : `${shortName}${primaryBadge}`;
 
   document.title = `${routeNum} ${plateLabel} - 高速道路Wikipediaガイド`;
   document.getElementById("facilityRouteNum").textContent = routeNum;
@@ -374,7 +531,6 @@ async function initFacilityPage() {
     location.href = `route.html?${rParams.toString()}`;
   });
 
-  // 前後の施設情報取得
   let adjacent = { prev: null, next: null };
   try {
     const savedList = JSON.parse(sessionStorage.getItem("hw_current_ic_list") || "[]");
@@ -384,8 +540,8 @@ async function initFacilityPage() {
     }
   } catch (_) {}
 
-  let activeTab = "detail"; // "overview" | "detail"
-  let displayMode = "original"; // "original" | "raw"
+  let activeSection = "detail";
+  let displayMode = "original";
   let parsedFacility = null;
 
   const navItems = document.querySelectorAll(".sidebar-nav .nav-item");
@@ -396,7 +552,7 @@ async function initFacilityPage() {
   function render() {
     if (!parsedFacility) return;
 
-    navItems.forEach(b => b.classList.toggle("active", b.dataset.tab === activeTab));
+    navItems.forEach(b => b.classList.toggle("active", b.dataset.tab === activeSection));
     modeBtns.forEach(b => b.classList.toggle("active", b.dataset.mode === displayMode));
 
     if (displayMode === "raw") {
@@ -404,29 +560,55 @@ async function initFacilityPage() {
       return;
     }
 
-    if (activeTab === "overview") {
-      mainContent.innerHTML = WikiRenderer.renderOverviewTab(parsedFacility.overview, plateLabel);
-      return;
-    }
+    // 概要セクションHTML
+    const overviewSectionHtml = `
+      <section id="sec-facility-overview" class="facility-unified-section">
+        <div class="facility-section-banner">
+          <span class="facility-section-tag">OVERVIEW</span>
+          <h2>概要・基本データ</h2>
+        </div>
+        ${WikiRenderer.renderOverviewTab(parsedFacility.overview, plateLabel)}
+      </section>
+    `;
 
-    // オリジナル描画モード（詳細タブ）
+    // 施設（または接続道路・詳細）セクションHTML
+    let detailBodyHtml = "";
     if (parsedFacility.isSapa) {
       const dirs = parsedFacility.sapaDirections;
       if (!dirs || dirs.length === 0) {
-        mainContent.innerHTML = `
+        detailBodyHtml = `
           <div class="notice-banner">このSA/PAの施設一覧を自動抽出できなかったため、原文を表示しています。</div>
           <div class="raw-wiki-container">${parsedFacility.rawHtml}</div>
         `;
-        return;
+      } else {
+        detailBodyHtml = dirs.map(d => WikiRenderer.renderSapaDirection(d)).join("");
       }
-      mainContent.innerHTML = dirs.map(d => WikiRenderer.renderSapaDirection(d)).join("");
     } else {
-      mainContent.innerHTML = WikiRenderer.renderIcJctDetail(
+      detailBodyHtml = WikiRenderer.renderIcJctDetail(
         parsedFacility.icDetail,
         { num, shortName, name: fullName, types, km },
         adjacent
       );
+    }
 
+    const detailSectionHtml = `
+      <section id="sec-facility-detail" class="facility-unified-section">
+        <div class="facility-section-banner">
+          <span class="facility-section-tag">${parsedFacility.isSapa ? "FACILITIES" : "DETAILS"}</span>
+          <h2>${parsedFacility.isSapa ? "施設・駐車場・店舗一覧" : "接続道路・詳細"}</h2>
+        </div>
+        ${detailBodyHtml}
+      </section>
+    `;
+
+    // 1ページに「施設」と「概要」をまとめて連続表示
+    mainContent.innerHTML = `
+      ${detailSectionHtml}
+      <hr class="facility-unified-divider" />
+      ${overviewSectionHtml}
+    `;
+
+    if (!parsedFacility.isSapa) {
       const goAdj = (adjItem) => {
         if (!adjItem) return;
         const nextParams = new URLSearchParams({
@@ -451,10 +633,21 @@ async function initFacilityPage() {
     }
   }
 
+  // サイドバーの「施設」「概要」クリックで1ページ内の該当セクションへスムーズスクロール
   navItems.forEach(btn => {
     btn.addEventListener("click", () => {
-      activeTab = btn.dataset.tab;
-      render();
+      activeSection = btn.dataset.tab;
+      if (displayMode === "raw") {
+        displayMode = "original";
+        render();
+      } else {
+        navItems.forEach(b => b.classList.toggle("active", b.dataset.tab === activeSection));
+      }
+      const targetId = activeSection === "overview" ? "sec-facility-overview" : "sec-facility-detail";
+      const targetEl = document.getElementById(targetId);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     });
   });
 
@@ -473,7 +666,7 @@ async function initFacilityPage() {
   } catch (err) {
     mainContent.innerHTML = `
       <div class="notice-banner" style="background:#ffebee; border-color:#ef9a9a; color:#b71c1c;">
-        Wikipedia記事「${WikiRenderer.escapeHtml(facilityWiki)}」の取得に失敗しました（未開通・事業中などで単独記事がまだ存在しない可能性があります）。
+        Wikipedia記事「${WikiRenderer.escapeHtml(facilityWiki)}」の取得に失敗しました（未開通・事業中・バス停留所などで単独記事がまだ存在しない可能性があります）。
       </div>
     `;
   }
