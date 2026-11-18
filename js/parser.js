@@ -21,11 +21,9 @@ const WikiParser = (() => {
     const clone = cell.cloneNode(true);
     clone.querySelectorAll(".mw-editsection, script, style, sup.reference").forEach(n => n.remove());
 
-    // <br> を改行マーカーに置換
     clone.querySelectorAll("br").forEach(br => {
       br.replaceWith("\n");
     });
-    // ブロック要素の前後にも改行を挿入
     clone.querySelectorAll("p, div, li").forEach(el => {
       el.prepend("\n");
       el.append("\n");
@@ -213,7 +211,7 @@ const WikiParser = (() => {
   }
 
   /**
-   * 個別施設名から種別サフィックスを除いたベース名（例: "米原IC" -> "米原", "北陸米原BS" -> "北陸米原"）を取得
+   * 個別施設名から種別サフィックスを除いたベース名を取得
    */
   function stripFacilitySuffix(name) {
     return cleanText(name)
@@ -223,7 +221,7 @@ const WikiParser = (() => {
   }
 
   /**
-   * 施設名セルから表示名・種別・個別リンク（ICとBS併設時の個別遷移先・重複解消）を解析
+   * 施設名セルから表示名・種別・個別リンクを解析
    */
   function parseFacilityCell(nameCell) {
     const lines = extractCellLines(nameCell);
@@ -249,7 +247,6 @@ const WikiParser = (() => {
       };
     });
 
-    // 行ごとのトークンからも施設候補を抽出（リンクが無い場合や同一リンク内に複数書かれている場合）
     const lineTokens = [];
     for (const ln of lines) {
       const parts = ln.split(/\s*[\/・／]\s*/).map(p => p.trim()).filter(Boolean);
@@ -288,10 +285,10 @@ const WikiParser = (() => {
           TB: "本線料金所",
           TN: "トンネル"
         };
-        const guessedWiki = sName && wikiSuffixMap[t] ? `${sName}${wikiSuffixMap[t]}` : defaultWiki;
+        const guessedWiki = sName && wikiSuffixMap[t] ? `${sName}${wikiSuffixMap[t]} ` : defaultWiki;
         return {
           type: t,
-          wikiTitle: guessedWiki,
+          wikiTitle: guessedWiki.trim(),
           label: tokenMatch.text,
           shortName: sName
         };
@@ -322,7 +319,6 @@ const WikiParser = (() => {
       };
     });
 
-    // メイン施設を決定（BS・TB・TNよりIC/JCT/SA/PA/SICを優先）
     const priorityOrder = ["IC", "JCT", "SIC", "SA", "PA", "TB", "TN", "BS"];
     let primaryBadge = badgeItems[0];
     for (const pType of priorityOrder) {
@@ -333,7 +329,6 @@ const WikiParser = (() => {
       }
     }
 
-    // 一覧表示用の短縮名（同名なら1つに、別名併設なら "米原 / 北陸米原" のように重複なく表示）
     const uniqueShortNames = [];
     for (const b of badgeItems) {
       if (b.shortName && !uniqueShortNames.includes(b.shortName)) {
@@ -364,7 +359,7 @@ const WikiParser = (() => {
     const isHighwayName = (str) => {
       if (!str) return false;
       if (/国道\d+号|(?:都|道|府|県)道\d+号|市道|町道|村道|連絡歩道/.test(str)) return false;
-      return /(高速道路|自動車道|有料道路|首都高速|阪神高速|名古屋高速|福岡高速|北九州高速|広島高速|アクアライン|京葉道路|第三京浜|横浜新道|横浜横須賀道路|東富士五湖道路|西湘バイパス|小田原厚木道路|圏央道|外環道|新東名|新名神)/.test(str);
+      return /(高速道路|自動車道|有料道路|道路|首都高速|阪神高速|名古屋高速|福岡高速|北九州高速|広島高速|アクアライン|バイパス|新道|圏央道|外環道|新東名|新名神)/.test(str);
     };
 
     const anchors = Array.from(containerEl.querySelectorAll("a[title]")).filter(a => {
@@ -381,14 +376,13 @@ const WikiParser = (() => {
         const wikiTitle = titleAttr || linkText;
         seenWikis.add(wikiTitle);
 
-        // リンク直前またはリンク内の路線番号 (E1, E1A, C3, C4等) を探す
         let routeNum = "";
         const escapedLink = linkText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const numBeforeMatch = fullText.match(new RegExp(`(E\\d+[A-Z]?|C\\d+[A-Z]?)\\s*${escapedLink}`));
+        const numBeforeMatch = fullText.match(new RegExp(`(E\\d+[A-Z]?|C\\d+[A-Z]?|CA)\\s*${escapedLink}`));
         if (numBeforeMatch) {
           routeNum = numBeforeMatch[1];
         } else {
-          const selfNumMatch = `${linkText} ${titleAttr}`.match(/\b(E\d+[A-Z]?|C\d+[A-Z]?)\b/);
+          const selfNumMatch = `${linkText} ${titleAttr}`.match(/\b(E\d+[A-Z]?|C\d+[A-Z]?|CA)\b/);
           if (selfNumMatch) routeNum = selfNumMatch[1];
         }
 
@@ -400,9 +394,8 @@ const WikiParser = (() => {
       }
     }
 
-    // アンカータグが無くテキストのみで書かれている場合のフォールバック
     if (results.length === 0) {
-      const regex = /(?:(E\d+[A-Z]?|C\d+[A-Z]?)\s*)?([一-龠ぁ-んァ-ヶー]+(?:高速道路|自動車道|有料道路))/g;
+      const regex = /(?:(E\d+[A-Z]?|C\d+[A-Z]?|CA)\s*)?([一-龠ぁ-んァ-ヶー]+(?:高速道路|自動車道|有料道路|道路|バイパス|新道))/g;
       let m;
       while ((m = regex.exec(fullText)) !== null) {
         const name = m[2];
@@ -421,23 +414,151 @@ const WikiParser = (() => {
   }
 
   /**
-   * 路線ページのHTML解析
+   * テキストから路線ナンバリング（E19, E20, E68, C1 等）を抽出
+   */
+  function extractRouteNumbersFromText(text) {
+    const matches = cleanText(text).match(/\b(E\d+[A-Z]?|C\d+[A-Z]?|CA)\b/g);
+    return matches ? Array.from(new Set(matches)) : [];
+  }
+
+  /**
+   * 路線ページのHTML解析（複数テーブル・ナンバリング変化・支線/連絡路・つづき路線対応）
    */
   function parseRoutePage(htmlString) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(htmlString, "text/html");
+    const root = doc.querySelector(".mw-parser-output") || doc.body;
 
     const overview = {
       paragraphs: extractLeadParagraphs(doc),
       infobox: extractInfobox(doc)
     };
 
-    const icElements = getElementsUnderHeading(doc, ["インターチェンジなど", "出入口", "インターチェンジ一覧"], "H2");
-    let interchanges = [];
-    const icTable = icElements.map(el => el.tagName === "TABLE" ? el : el.querySelector("table.wikitable")).find(Boolean);
+    const pageTitleEl = doc.querySelector("h1, .mw-page-title-main");
+    const selfTitle = pageTitleEl ? cleanText(pageTitleEl.textContent) : "";
 
-    if (icTable) {
-      interchanges = parseInterchangeTable(icTable);
+    const excludedH2 = [
+      "概要", "歴史", "沿革", "路線状況", "道路施設", "主なトンネルと橋",
+      "交通量", "車線・最高速度", "料金", "地理", "通過する自治体",
+      "接続する高速道路", "関連項目", "脚注", "注釈", "出典", "参考文献", "外部リンク"
+    ];
+
+    const tableEntries = [];
+    const postTableElements = [];
+    let currentH2 = "";
+    let currentSubHeading = "";
+
+    for (const child of root.children) {
+      const isH2 = child.tagName === "H2" || child.classList.contains("mw-heading2");
+      const isH3 = child.tagName === "H3" || child.classList.contains("mw-heading3");
+      const isH4 = child.tagName === "H4" || child.classList.contains("mw-heading4");
+
+      if (isH2) {
+        currentH2 = cleanHeadingText(child);
+        currentSubHeading = "";
+        continue;
+      }
+      if (isH3 || isH4) {
+        currentSubHeading = cleanHeadingText(child);
+        continue;
+      }
+
+      const isPrimaryIcH2 = /インターチェンジなど|出入口|インターチェンジ一覧|施設一覧/.test(currentH2);
+      const isBranchH2 = currentH2 &&
+        !excludedH2.some(ex => currentH2.includes(ex)) &&
+        /支線|連絡路|富士吉田線|バイパス|有料道路|自動車道|線$/.test(currentH2);
+
+      if (!isPrimaryIcH2 && !isBranchH2) continue;
+
+      const tables = child.tagName === "TABLE"
+        ? [child]
+        : Array.from(child.querySelectorAll("table.wikitable"));
+
+      if (tables.length > 0) {
+        for (const tbl of tables) {
+          const firstRowText = cleanText(tbl.querySelector("tr")?.textContent || "");
+          if (/施設名|名称|なまえ|IC番号|番号|キロ|距離|接続路線/.test(firstRowText)) {
+            let sectionTitle = "";
+            if (isPrimaryIcH2) {
+              sectionTitle = currentSubHeading || "本線";
+            } else {
+              sectionTitle = currentSubHeading ? `${currentH2}（${currentSubHeading}）` : currentH2;
+            }
+            const nums = extractRouteNumbersFromText(`${currentSubHeading} ${currentH2}`);
+            tableEntries.push({
+              table: tbl,
+              sectionTitle,
+              sectionRouteNum: nums.join(" / "),
+              isBranch: isBranchH2 || /支線|連絡路|富士吉田線/.test(currentSubHeading)
+            });
+          }
+        }
+      } else if (isPrimaryIcH2 || isBranchH2) {
+        postTableElements.push(child);
+      }
+    }
+
+    const interchanges = [];
+    const continuations = [];
+    const seenContWikis = new Set();
+
+    const addContinuation = (lk, noteText) => {
+      if (!lk || !lk.wikiTitle) return;
+      if (selfTitle && (lk.wikiTitle === selfTitle || lk.name === selfTitle)) return;
+      if (seenContWikis.has(lk.wikiTitle)) return;
+      seenContWikis.add(lk.wikiTitle);
+      continuations.push({
+        num: lk.num || "",
+        name: lk.name,
+        wikiTitle: lk.wikiTitle,
+        note: noteText || "直結・連続する道路"
+      });
+    };
+
+    for (const entry of tableEntries) {
+      const parsed = parseInterchangeTable(entry.table, {
+        sectionTitle: entry.sectionTitle,
+        sectionRouteNum: entry.sectionRouteNum,
+        isBranch: entry.isBranch
+      });
+      interchanges.push(...parsed.rows);
+      for (const c of parsed.continuations) {
+        addContinuation(c, c.note);
+      }
+    }
+
+    // 表の直後にある解説文・箇条書きから「つづき・直結道路」を抽出（例：北関東道 → 東水戸道路）
+    for (const el of postTableElements) {
+      const txt = cleanText(el.textContent);
+      if (/直結|直通|連続|接続|つづき|続き|方面/.test(txt)) {
+        const hwLinks = extractHighwayLinks(el);
+        for (const lk of hwLinks) {
+          addContinuation(lk, txt.length <= 45 ? txt : "直結・連続する道路");
+        }
+      }
+    }
+
+    // 路線全体の起点・終点行（先頭行・最終行）の接続路線からも直結道路を補完
+    const mainRows = interchanges.filter(r => !r.isBranch);
+    if (mainRows.length > 0) {
+      const lastRow = mainRows[mainRows.length - 1];
+      if (lastRow && Array.isArray(lastRow.connectLinks)) {
+        for (const lk of lastRow.connectLinks) {
+          addContinuation(lk, `${lastRow.shortName}（終点側）から接続・直結`);
+        }
+      }
+    }
+
+    // Infobox の「次道路」「前道路」からも補完
+    for (const row of overview.infobox) {
+      if (/次道路|前道路/.test(row.key)) {
+        const fakeDiv = document.createElement("div");
+        fakeDiv.textContent = row.val;
+        const links = extractHighwayLinks(fakeDiv);
+        for (const lk of links) {
+          addContinuation(lk, `${row.key}：${row.val}`);
+        }
+      }
     }
 
     const statusElements = getElementsUnderHeading(doc, ["路線状況"], "H2");
@@ -446,17 +567,18 @@ const WikiParser = (() => {
     return {
       overview,
       interchanges,
+      continuations,
       status,
       rawHtml: sanitizeRawHtml(doc)
     };
   }
 
   /**
-   * Wikipediaの「インターチェンジなど」wikitable をグリッド展開して正確に解析
+   * Wikipediaの「インターチェンジなど」wikitable をグリッド展開して解析
    */
-  function parseInterchangeTable(table) {
+  function parseInterchangeTable(table, meta = {}) {
     const grid = expandTableToGrid(table);
-    if (grid.length < 2) return [];
+    if (grid.length < 2) return { rows: [], continuations: [] };
 
     const headerRow = grid[0] || [];
     const headerTexts = headerRow.map(slot => slot ? cleanText(slot.cell.textContent) : "");
@@ -474,12 +596,46 @@ const WikiParser = (() => {
     if (idxNote === -1) idxNote = 4;
 
     const list = [];
+    const continuations = [];
+    let currentSectionTitle = meta.sectionTitle || "本線";
+    let currentSectionRouteNum = meta.sectionRouteNum || "";
+    let currentIsBranch = Boolean(meta.isBranch);
 
     for (let r = 1; r < grid.length; r++) {
       const row = grid[r];
       if (!row || row.length < 2) continue;
 
-      if (row[0] && row[0].colspan >= 4) continue;
+      // 全幅（colspan >= 4）の区切り行の解析（ナンバリング切替・支線見出し・直結案内）
+      if (row[0] && row[0].colspan >= 4) {
+        const bannerCell = row[0].cell;
+        const bannerText = cleanText(bannerCell.textContent);
+        if (!bannerText) continue;
+
+        // 先頭行や最終行の「〇〇道路へ直結」バナー
+        if ((r === 1 || r >= grid.length - 2) && /直結|直通|連続|方面/.test(bannerText)) {
+          const links = extractHighwayLinks(bannerCell);
+          for (const lk of links) {
+            continuations.push({
+              ...lk,
+              note: bannerText
+            });
+          }
+          continue;
+        }
+
+        // 表途中のナンバリング変更や支線・連絡路の見出し行
+        const nums = extractRouteNumbersFromText(bannerText);
+        if (nums.length > 0 || /支線|連絡路|本線|富士吉田線|西宮線/.test(bannerText)) {
+          currentSectionTitle = bannerText;
+          if (nums.length > 0) {
+            currentSectionRouteNum = nums.join(" / ");
+          }
+          if (/支線|連絡路|富士吉田線/.test(bannerText)) {
+            currentIsBranch = true;
+          }
+        }
+        continue;
+      }
 
       const nameSlot = row[idxName];
       if (!nameSlot || !nameSlot.cell) continue;
@@ -493,12 +649,11 @@ const WikiParser = (() => {
       const numRaw = row[idxNum] ? cleanText(row[idxNum].cell.textContent) : "-";
       const safeNum = (numRaw === "-" || numRaw === "―" || numRaw.length > 10) ? "-" : numRaw;
 
-      // 距離セル：上り線・下り線で異なる場合（<br>区切り等）を行ごとの配列として抽出
+      // 距離セル
       const rawKmLines = row[idxKm] ? extractCellLines(row[idxKm].cell) : [];
       const kmLines = [];
       for (const line of rawKmLines) {
         if (line === "-" || line === "―") continue;
-        // 1行にスペース区切りで2つの数値が並んでいる場合も分割
         const twoNums = line.match(/^([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)$/);
         if (twoNums) {
           kmLines.push(`${twoNums[1]}km`, `${twoNums[2]}km`);
@@ -512,16 +667,16 @@ const WikiParser = (() => {
       }
       const kmDisplay = kmLines.join(" / ");
 
-      // 接続路線セル：テキスト行＋高速道路リンク抽出
+      // 接続路線セル
       const connectLines = row[idxConnect] ? extractCellLines(row[idxConnect].cell).filter(l => l !== "-" && l !== "―") : [];
       const connectRaw = connectLines.join(" / ");
       const connectLinks = row[idxConnect] ? extractHighwayLinks(row[idxConnect].cell) : [];
 
-      // 備考セル：上り線・下り線ごとの行を保持
+      // 備考セル
       const rawNoteLines = row[idxNote] ? extractCellLines(row[idxNote].cell).filter(l => l !== "-" && l !== "―") : [];
       const noteLines = rawNoteLines.map(nl => {
-        if (/事業中|建設中|予定|未開通/.test(nl)) {
-          const m = nl.match(/(事業中|建設中|予定|未開通)/);
+        if (/廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中/.test(nl)) {
+          const m = nl.match(/(廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)/);
           return m ? m[1] : nl;
         }
         return nl.length <= 22 ? nl : "";
@@ -529,6 +684,13 @@ const WikiParser = (() => {
 
       const shortNote = noteLines.join(" / ");
       const fullNote = rawNoteLines.join(" / ");
+
+      // 未開通・廃止・建設予定の判定
+      const combinedStatus = `${parsedFacility.fullName} ${rawNoteLines.join(" ")} ${rawKmLines.join(" ")}`;
+      const isAbolished = /廃止|閉鎖|休止/.test(combinedStatus);
+      const isUnopened = /未開通|事業中|建設中|建設予定|開通予定|供用予定|計画中|整備中/.test(combinedStatus) ||
+        (/予定/.test(combinedStatus) && !/スマートIC.*予定|SIC.*予定/.test(combinedStatus));
+      const isInactive = isAbolished || isUnopened;
 
       list.push({
         num: safeNum,
@@ -545,11 +707,16 @@ const WikiParser = (() => {
         fullNote,
         connect: connectRaw,
         connectLines,
-        connectLinks
+        connectLinks,
+        isInactive,
+        inactiveType: isAbolished ? "abolished" : (isUnopened ? "unopened" : null),
+        sectionTitle: currentSectionTitle,
+        sectionRouteNum: currentSectionRouteNum,
+        isBranch: currentIsBranch
       });
     }
 
-    return list;
+    return { rows: list, continuations };
   }
 
   /**
@@ -654,7 +821,7 @@ const WikiParser = (() => {
   }
 
   /**
-   * 一般道側駐車場（ぷらっとパーク / ぶらっとパーク / ウォークインゲート等）判定
+   * 一般道側駐車場判定
    */
   function isGeneralParkingText(text) {
     return /[ぷらぶ]らっとパーク|ウォークイン|ウェルカムゲート|一般道|外部駐車場|高速道路外/.test(text || "");
@@ -954,7 +1121,7 @@ const WikiParser = (() => {
   }
 
   /**
-   * IC / JCT / BS 記事の「接続する道路」「歴史」を解析（高速道路リンク対応）
+   * IC / JCT / BS 記事の「接続する道路」「歴史」を解析
    */
   function parseIcJctDetail(doc) {
     const roadElems = getElementsUnderHeading(doc, ["接続する道路", "接続道路"], "H2");
