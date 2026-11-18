@@ -858,3 +858,41 @@
   color: var(--hw-green);
   text-align: right;
 }
+/* =========================================================
+   施設詳細画面：概要＆施設 1ページ統合表示レイアウト
+   ========================================================= */
+.facility-unified-section {
+  scroll-margin-top: 20px;
+}
+
+.facility-unified-divider {
+  border: none;
+  border-top: 2px solid #d5dfd7;
+  margin: 28px 0 26px;
+}
+
+.facility-section-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 2.5px solid var(--hw-green);
+}
+
+.facility-section-banner h2 {
+  font-size: 21px;
+  font-weight: 900;
+  color: var(--hw-green-dark);
+  margin: 0;
+}
+
+.facility-section-tag {
+  background-color: var(--hw-green);
+  color: #ffffff;
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 3px 9px;
+  border-radius: 5px;
+  letter-spacing: 0.04em;
+}
