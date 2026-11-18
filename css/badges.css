@@ -342,3 +342,48 @@
   position: relative;
   z-index: 1;
 }
+/* 一般道側（ぷらっとパーク等）駐車枠グループ */
+.parking-section-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.parking-sub-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.parking-group-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.parking-group-badge.main-hw {
+  background-color: #e8f5e9;
+  color: #145a32;
+  border: 1.5px solid #238636;
+}
+
+.parking-group-badge.general-road {
+  background-color: #e3f2fd;
+  color: #0d47a1;
+  border: 1.5px solid #1976d2;
+}
+
+.parking-card.general-road-card {
+  border-color: #1976d2;
+  background-color: #f7fbff;
+}
+
+.parking-card.general-road-card svg {
+  stroke: #0d47a1;
+}
