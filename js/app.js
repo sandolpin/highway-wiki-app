@@ -164,6 +164,17 @@ async function initIndexPage() {
     kyushu: "九州・沖縄地方の高速道路"
   };
 
+  /**
+   * カタカナ→ひらがな、全角英数字→半角、スペース除去で表記ゆれを吸収
+   */
+  function normalizeSearchText(str) {
+    return String(str || "")
+      .toLowerCase()
+      .replace(/[！-～]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))
+      .replace(/[\u30a1-\u30f6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60))
+      .replace(/[\s ・（）()]/g, "");
+  }
+
   function navigateToRoute(routeObj) {
     const params = new URLSearchParams({
       id: routeObj.id,
@@ -189,21 +200,23 @@ async function initIndexPage() {
       }
     );
 
-    const q = state.query.trim().toLowerCase();
+    const qNorm = normalizeSearchText(state.query);
     const filtered = routes.filter(r => {
       if (state.region !== "all" && !r.region.includes(state.region)) {
         return false;
       }
       if (state.operator !== "all") {
         if (state.operator === "urban") {
-          if (!/首都高速|本州四国/.test(r.operator)) return false;
+          if (!/首都高速|阪神高速|名古屋高速|本州四国/.test(r.operator)) return false;
         } else if (!r.operator.includes(state.operator)) {
           return false;
         }
       }
-      if (q) {
-        const target = `${r.number} ${r.name} ${r.section} ${r.regionLabel} ${r.operator}`.toLowerCase();
-        if (!target.includes(q)) return false;
+      if (qNorm) {
+        const target = normalizeSearchText(
+          `${r.number} ${r.name} ${r.kana || ""} ${r.romaji || ""} ${r.section} ${r.regionLabel} ${r.operator}`
+        );
+        if (!target.includes(qNorm)) return false;
       }
       return true;
     });
