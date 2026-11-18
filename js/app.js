@@ -416,7 +416,6 @@ async function initRoutePage() {
 
       sessionStorage.setItem("hw_current_ic_list", JSON.stringify(list));
 
-      // 区間・支線・連絡路・ナンバリング変化のグループを抽出
       const sectionGroups = [];
       const seenGroupKeys = new Set();
       for (const item of list) {
@@ -474,13 +473,20 @@ async function initRoutePage() {
 
         const inactiveCls = item.isInactive ? "ic-row-inactive" : "";
 
+        // PA/SAとSICが併設されている場合など、個別の施設名が分かる表示ラベルを生成
+        const displayNameText = (item.badgeItems && item.badgeItems.length > 1 &&
+          item.badgeItems.some(b => ["PA", "SA"].includes(b.type)) &&
+          item.badgeItems.some(b => b.type === "SIC"))
+          ? item.badgeItems.map(b => b.label).join(" / ")
+          : item.shortName;
+
         return `
           ${dividerHtml}
           <div class="ic-row-card ${inactiveCls}" data-index="${idx}" role="button" tabindex="0">
             <div class="ic-col-num">${WikiRenderer.escapeHtml(item.num)}</div>
             <div class="ic-col-name">
               ${WikiRenderer.renderFacilityBadges(item.types, item.badgeItems, true)}
-              <span>${WikiRenderer.escapeHtml(item.shortName)}</span>
+              <span>${WikiRenderer.escapeHtml(displayNameText)}</span>
             </div>
             <div class="ic-col-km">${kmHtml}</div>
             <div class="ic-col-note">${noteHtml}</div>
@@ -489,7 +495,6 @@ async function initRoutePage() {
         `;
       }).join("");
 
-      // つづき・直結路線リンク（ICリスト最下部）
       const continuations = Array.isArray(parsedData.continuations) ? parsedData.continuations : [];
       const continuationHtml = continuations.length > 0 ? `
         <section class="route-continuation-box" aria-label="つづき・直結路線">
@@ -537,7 +542,6 @@ async function initRoutePage() {
         ${continuationHtml}
       `;
 
-      // 区間・支線タブクリック
       mainContent.querySelectorAll(".ic-branch-tab-btn").forEach(btn => {
         btn.addEventListener("click", () => {
           activeBranchFilter = btn.dataset.branchKey;
@@ -545,7 +549,6 @@ async function initRoutePage() {
         });
       });
 
-      // つづき・直結路線カードクリック＆ホバー
       mainContent.querySelectorAll(".route-continuation-card").forEach(card => {
         const hwNum = card.dataset.hwNum;
         const hwName = card.dataset.hwName;
@@ -574,7 +577,6 @@ async function initRoutePage() {
         card.addEventListener("mouseleave", () => WikiHoverPreview.hide());
       });
 
-      // 各施設行のイベント登録
       mainContent.querySelectorAll(".ic-row-card").forEach(row => {
         const idx = Number(row.dataset.index);
         const item = list[idx];
@@ -589,10 +591,12 @@ async function initRoutePage() {
         });
 
         row.addEventListener("mouseenter", e => {
-          const mainLabel = item.primaryBadge ? item.primaryBadge.label : item.fullName;
+          const joinedBadgesTitle = (item.badgeItems && item.badgeItems.length > 1)
+            ? item.badgeItems.map(b => `${b.label}${b.isInactive ? "(事業中)" : ""}`).join(" / ")
+            : (item.primaryBadge ? item.primaryBadge.label : item.fullName);
           WikiHoverPreview.show({
             key: `ic_${idx}_${item.wikiTitle}`,
-            title: `${item.num !== "-" ? `[${item.num}] ` : ""}${mainLabel}`,
+            title: `${item.num !== "-" ? `[${item.num}] ` : ""}${joinedBadgesTitle}`,
             types: item.types,
             metaLines: [
               item.km ? `起点から：${item.km}` : "",
@@ -728,7 +732,7 @@ async function initRoutePage() {
 }
 
 /* ---------------------------------------------------------
-   3. 施設詳細画面 (facility.html : PA/SA & IC/JCT/BS 1ページ統合表示)
+   3. 施設詳細画面 (facility.html : 概要 → 施設 1ページ統合表示)
    --------------------------------------------------------- */
 async function initFacilityPage() {
   const params = new URLSearchParams(location.search);
@@ -747,7 +751,9 @@ async function initFacilityPage() {
   const primaryBadge = types[0] || "IC";
 
   const hasSuffix = /(IC|JCT|SA|PA|SIC|BS|TB|TN|インターチェンジ|ジャンクション|サービスエリア|パーキングエリア|バスストップ)$/i.test(fullName);
-  const plateLabel = hasSuffix ? fullName : `${shortName}${primaryBadge}`;
+  const plateLabel = (hasSuffix && !/^(IC|JCT|SA|PA|SIC|BS|TB|TN)$/i.test(fullName))
+    ? fullName
+    : `${shortName}${primaryBadge}`;
 
   document.title = `${routeNum} ${plateLabel} - 高速道路Wikipediaガイド`;
   document.getElementById("facilityRouteNum").textContent = routeNum;
@@ -778,7 +784,7 @@ async function initFacilityPage() {
     }
   } catch (_) {}
 
-  let activeSection = "detail";
+  let activeSection = "overview";
   let displayMode = "original";
   let parsedFacility = null;
 
@@ -829,6 +835,7 @@ async function initFacilityPage() {
           <span class="facility-section-tag">OVERVIEW</span>
           <h2>概要・基本データ</h2>
         </div>
+        ${coFacilitiesHtml}
         ${WikiRenderer.renderOverviewTab(parsedFacility.overview, plateLabel)}
       </section>
     `;
@@ -860,15 +867,15 @@ async function initFacilityPage() {
           <span class="facility-section-tag">${parsedFacility.isSapa ? "FACILITIES" : "DETAILS"}</span>
           <h2>${parsedFacility.isSapa ? "施設・駐車場・店舗一覧" : "接続道路・詳細"}</h2>
         </div>
-        ${coFacilitiesHtml}
         ${detailBodyHtml}
       </section>
     `;
 
+    // 左ヘッダー（概要 → 施設）と同じ順番で連続表示
     mainContent.innerHTML = `
-      ${detailSectionHtml}
-      <hr class="facility-unified-divider" />
       ${overviewSectionHtml}
+      <hr class="facility-unified-divider" />
+      ${detailSectionHtml}
     `;
 
     mainContent.querySelectorAll(".co-facility-chip:not(.active)").forEach(chip => {
