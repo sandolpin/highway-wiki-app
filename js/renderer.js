@@ -23,7 +23,7 @@ const WikiRenderer = (() => {
         const cls = validClasses.includes(lower) ? lower : "other";
         const clickCls = clickable ? "clickable-badge" : "";
         const dataAttrs = clickable
-          ? `data-wiki="${escapeHtml(b.wikiTitle)}" data-type="${escapeHtml(b.type)}" data-label="${escapeHtml(b.label)}" title="${escapeHtml(b.label)} の詳細へ移動"`
+          ? `data-wiki="${escapeHtml(b.wikiTitle)}" data-type="${escapeHtml(b.type)}" data-label="${escapeHtml(b.label)}" data-short="${escapeHtml(b.shortName || "")}" title="${escapeHtml(b.label)} の詳細へ移動"`
           : "";
         return `<span class="f-badge ${cls} ${clickCls}" ${dataAttrs}>${escapeHtml(b.type)}</span>`;
       }).join("");
@@ -263,9 +263,9 @@ const WikiRenderer = (() => {
   }
 
   /**
-   * IC / JCT / BS 詳細画面の描画
+   * IC / JCT / BS 詳細画面の描画（JCT接続高速道路リンク・併設施設切替対応）
    */
-  function renderIcJctDetail(icDetail, meta, adjacent) {
+  function renderIcJctDetail(icDetail, meta, adjacent, fallbackConnectLinks = []) {
     const heroHtml = `
       <div class="ic-detail-hero">
         <div class="ic-hero-left">
@@ -313,16 +313,57 @@ const WikiRenderer = (() => {
       return `<span class="f-badge other">接続</span>`;
     };
 
-    const roadsHtml = icDetail.connectedRoads && icDetail.connectedRoads.length > 0 ? `
+    // 記事内「接続する道路」リスト（高速道路の場合はクリック遷移カードにする）
+    let roadsList = Array.isArray(icDetail.connectedRoads) ? [...icDetail.connectedRoads] : [];
+
+    // 記事内に「接続する道路」が無い、または高速道路が含まれていない場合、路線表の接続高速道路を補完
+    if (Array.isArray(fallbackConnectLinks) && fallbackConnectLinks.length > 0) {
+      for (const fb of fallbackConnectLinks) {
+        const alreadyExists = roadsList.some(r => r.kind === "highway" && (r.wikiTitle === fb.wikiTitle || r.name.includes(fb.name)));
+        if (!alreadyExists) {
+          roadsList.unshift({
+            kind: "highway",
+            num: fb.num || "HW",
+            name: fb.num ? `${fb.num} ${fb.name}` : fb.name,
+            hwName: fb.name,
+            wikiTitle: fb.wikiTitle
+          });
+        }
+      }
+    }
+
+    const roadsHtml = roadsList.length > 0 ? `
       <div class="wiki-prose-block">
         <h3>接続する道路</h3>
         <div class="connected-roads-list">
-          ${icDetail.connectedRoads.map(r => `
-            <div class="connected-road-card">
-              ${renderRoadSign(r)}
-              <span>${escapeHtml(r.name)}</span>
-            </div>
-          `).join("")}
+          ${roadsList.map(r => {
+            if (r.kind === "highway") {
+              const targetWiki = r.wikiTitle || r.hwName || r.name;
+              const targetName = r.hwName || r.name;
+              const targetNum = r.num || "HW";
+              return `
+                <div class="connected-road-card clickable-hw-card"
+                     role="button"
+                     tabindex="0"
+                     data-hw-num="${escapeHtml(targetNum)}"
+                     data-hw-name="${escapeHtml(targetName)}"
+                     data-hw-wiki="${escapeHtml(targetWiki)}"
+                     title="${escapeHtml(targetName)} の路線ページへ移動">
+                  <div class="connected-road-card-left">
+                    ${renderRoadSign(r)}
+                    <span>${escapeHtml(r.name)}</span>
+                  </div>
+                  <span class="hw-jump-arrow">路線ページへ ↗</span>
+                </div>
+              `;
+            }
+            return `
+              <div class="connected-road-card">
+                ${renderRoadSign(r)}
+                <span>${escapeHtml(r.name)}</span>
+              </div>
+            `;
+          }).join("")}
         </div>
       </div>
     ` : "";
