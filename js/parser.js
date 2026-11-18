@@ -14,6 +14,30 @@ const WikiParser = (() => {
   }
 
   /**
+   * セル内の <br> やブロック要素を改行として保持し、行ごとの配列を返す
+   */
+  function extractCellLines(cell) {
+    if (!cell) return [];
+    const clone = cell.cloneNode(true);
+    clone.querySelectorAll(".mw-editsection, script, style, sup.reference").forEach(n => n.remove());
+
+    // <br> を改行マーカーに置換
+    clone.querySelectorAll("br").forEach(br => {
+      br.replaceWith("\n");
+    });
+    // ブロック要素の前後にも改行を挿入
+    clone.querySelectorAll("p, div, li").forEach(el => {
+      el.prepend("\n");
+      el.append("\n");
+    });
+
+    return (clone.textContent || "")
+      .split(/\n+/)
+      .map(line => cleanText(line))
+      .filter(line => line.length > 0);
+  }
+
+  /**
    * 見出し要素から [編集 | ソースを編集] を完全除去してテキスト取得
    */
   function cleanHeadingText(el) {
@@ -189,10 +213,21 @@ const WikiParser = (() => {
   }
 
   /**
-   * 施設名セルから表示名・種別・個別リンク（PAとIC併設時の個別遷移先）を解析
+   * 個別施設名から種別サフィックスを除いたベース名（例: "米原IC" -> "米原", "北陸米原BS" -> "北陸米原"）を取得
+   */
+  function stripFacilitySuffix(name) {
+    return cleanText(name)
+      .replace(/(スマートインターチェンジ|スマートIC|SIC|ジャンクション|JCT|インターチェンジ|IC|サービスエリア|SA|パーキングエリア|PA|本線料金所|料金所|TB|トンネル|TN|バスストップ|バス停留所|BS)/gi, "")
+      .replace(/^[\/・／・\s]+|[\/・／・\s]+$/g, "")
+      .trim();
+  }
+
+  /**
+   * 施設名セルから表示名・種別・個別リンク（ICとBS併設時の個別遷移先・重複解消）を解析
    */
   function parseFacilityCell(nameCell) {
-    const rawName = cleanText(nameCell.textContent);
+    const lines = extractCellLines(nameCell);
+    const rawName = lines.join(" ") || cleanText(nameCell.textContent);
     let types = detectTypesFromText(rawName);
     if (types.length === 0) {
       types = ["IC"];
@@ -214,60 +249,175 @@ const WikiParser = (() => {
       };
     });
 
+    // 行ごとのトークンからも施設候補を抽出（リンクが無い場合や同一リンク内に複数書かれている場合）
+    const lineTokens = [];
+    for (const ln of lines) {
+      const parts = ln.split(/\s*[\/・／]\s*/).map(p => p.trim()).filter(Boolean);
+      for (const p of parts) {
+        lineTokens.push({ text: p, types: detectTypesFromText(p) });
+      }
+    }
+
+    const fallbackBase = stripFacilitySuffix(lines[0] || rawName) || rawName;
     const defaultWiki = linkInfos.length > 0 ? linkInfos[0].wikiTitle : rawName;
 
     const badgeItems = types.map(t => {
       const exactMatch = linkInfos.find(info => info.types.includes(t));
+      const tokenMatch = lineTokens.find(tok => tok.types.includes(t));
+
       if (exactMatch) {
+        const label = (tokenMatch && tokenMatch.types.length === 1) ? tokenMatch.text : (exactMatch.text || exactMatch.wikiTitle);
+        const sName = stripFacilitySuffix(label) || stripFacilitySuffix(exactMatch.wikiTitle) || fallbackBase;
         return {
           type: t,
           wikiTitle: exactMatch.wikiTitle,
-          label: exactMatch.text || exactMatch.wikiTitle
+          label,
+          shortName: sName
         };
       }
-      const baseName = rawName
-        .replace(/(スマートIC|SIC|JCT|ジャンクション|IC|インターチェンジ|SA|サービスエリア|PA|パーキングエリア|TB|本線料金所|料金所|TN|トンネル|BS|バスストップ|バス停留所)/gi, "")
-        .replace(/[\/・／（）()]+/g, "")
-        .trim();
 
-      if (t === "PA" && baseName) {
-        return { type: "PA", wikiTitle: `${baseName}パーキングエリア`, label: `${baseName}PA` };
+      if (tokenMatch) {
+        const sName = stripFacilitySuffix(tokenMatch.text) || fallbackBase;
+        const wikiSuffixMap = {
+          PA: "パーキングエリア",
+          SA: "サービスエリア",
+          SIC: "スマートインターチェンジ",
+          IC: "インターチェンジ",
+          JCT: "ジャンクション",
+          BS: "バスストップ",
+          TB: "本線料金所",
+          TN: "トンネル"
+        };
+        const guessedWiki = sName && wikiSuffixMap[t] ? `${sName}${wikiSuffixMap[t]}` : defaultWiki;
+        return {
+          type: t,
+          wikiTitle: guessedWiki,
+          label: tokenMatch.text,
+          shortName: sName
+        };
       }
-      if (t === "SA" && baseName) {
-        return { type: "SA", wikiTitle: `${baseName}サービスエリア`, label: `${baseName}SA` };
+
+      const wikiSuffixMap = {
+        PA: "パーキングエリア",
+        SA: "サービスエリア",
+        SIC: "スマートインターチェンジ",
+        IC: "インターチェンジ",
+        JCT: "ジャンクション",
+        BS: "バスストップ"
+      };
+      if (wikiSuffixMap[t] && fallbackBase) {
+        return {
+          type: t,
+          wikiTitle: `${fallbackBase}${wikiSuffixMap[t]}`,
+          label: `${fallbackBase}${t}`,
+          shortName: fallbackBase
+        };
       }
-      if (t === "SIC" && baseName) {
-        return { type: "SIC", wikiTitle: `${baseName}スマートインターチェンジ`, label: `${baseName}SIC` };
-      }
-      if (t === "IC" && baseName) {
-        return { type: "IC", wikiTitle: `${baseName}インターチェンジ`, label: `${baseName}IC` };
-      }
-      if (t === "JCT" && baseName) {
-        return { type: "JCT", wikiTitle: `${baseName}ジャンクション`, label: `${baseName}JCT` };
-      }
+
       return {
         type: t,
         wikiTitle: defaultWiki,
-        label: rawName
+        label: rawName,
+        shortName: fallbackBase
       };
     });
 
-    let shortName = rawName
-      .replace(/(スマートIC|SIC|JCT|ジャンクション|IC|インターチェンジ|SA|サービスエリア|PA|パーキングエリア|TB|本線料金所|料金所|TN|トンネル|BS|バスストップ|バス停留所)/gi, "")
-      .replace(/[\/・／]+$/g, "")
-      .replace(/^[\/・／]+/g, "")
-      .replace(/\s*[\/・／]\s*/g, "・")
-      .trim();
+    // メイン施設を決定（BS・TB・TNよりIC/JCT/SA/PA/SICを優先）
+    const priorityOrder = ["IC", "JCT", "SIC", "SA", "PA", "TB", "TN", "BS"];
+    let primaryBadge = badgeItems[0];
+    for (const pType of priorityOrder) {
+      const found = badgeItems.find(b => b.type === pType);
+      if (found) {
+        primaryBadge = found;
+        break;
+      }
+    }
 
-    if (!shortName) shortName = rawName;
+    // 一覧表示用の短縮名（同名なら1つに、別名併設なら "米原 / 北陸米原" のように重複なく表示）
+    const uniqueShortNames = [];
+    for (const b of badgeItems) {
+      if (b.shortName && !uniqueShortNames.includes(b.shortName)) {
+        uniqueShortNames.push(b.shortName);
+      }
+    }
+    const displayShortName = uniqueShortNames.length > 0 ? uniqueShortNames.join(" / ") : fallbackBase;
 
     return {
       types,
       badgeItems,
-      shortName,
+      primaryBadge,
+      shortName: displayShortName,
       fullName: rawName,
-      wikiTitle: defaultWiki
+      wikiTitle: primaryBadge ? primaryBadge.wikiTitle : defaultWiki
     };
+  }
+
+  /**
+   * 高速道路・有料道路へのリンクかどうかを判定し、路線番号とWikiタイトルを抽出
+   */
+  function extractHighwayLinks(containerEl) {
+    if (!containerEl) return [];
+    const results = [];
+    const seenWikis = new Set();
+    const fullText = cleanText(containerEl.textContent);
+
+    const isHighwayName = (str) => {
+      if (!str) return false;
+      if (/国道\d+号|(?:都|道|府|県)道\d+号|市道|町道|村道|連絡歩道/.test(str)) return false;
+      return /(高速道路|自動車道|有料道路|首都高速|阪神高速|名古屋高速|福岡高速|北九州高速|広島高速|アクアライン|京葉道路|第三京浜|横浜新道|横浜横須賀道路|東富士五湖道路|西湘バイパス|小田原厚木道路|圏央道|外環道|新東名|新名神)/.test(str);
+    };
+
+    const anchors = Array.from(containerEl.querySelectorAll("a[title]")).filter(a => {
+      const href = a.getAttribute("href") || "";
+      return !href.startsWith("#");
+    });
+
+    for (const a of anchors) {
+      const linkText = cleanText(a.textContent);
+      const titleAttr = (a.getAttribute("title") || "").replace(/\s*\(存在しないページ\)/g, "").trim();
+      const targetName = isHighwayName(titleAttr) ? titleAttr : (isHighwayName(linkText) ? linkText : "");
+
+      if (targetName && !seenWikis.has(titleAttr || linkText)) {
+        const wikiTitle = titleAttr || linkText;
+        seenWikis.add(wikiTitle);
+
+        // リンク直前またはリンク内の路線番号 (E1, E1A, C3, C4等) を探す
+        let routeNum = "";
+        const escapedLink = linkText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const numBeforeMatch = fullText.match(new RegExp(`(E\\d+[A-Z]?|C\\d+[A-Z]?)\\s*${escapedLink}`));
+        if (numBeforeMatch) {
+          routeNum = numBeforeMatch[1];
+        } else {
+          const selfNumMatch = `${linkText} ${titleAttr}`.match(/\b(E\d+[A-Z]?|C\d+[A-Z]?)\b/);
+          if (selfNumMatch) routeNum = selfNumMatch[1];
+        }
+
+        results.push({
+          num: routeNum,
+          name: linkText || titleAttr,
+          wikiTitle
+        });
+      }
+    }
+
+    // アンカータグが無くテキストのみで書かれている場合のフォールバック
+    if (results.length === 0) {
+      const regex = /(?:(E\d+[A-Z]?|C\d+[A-Z]?)\s*)?([一-龠ぁ-んァ-ヶー]+(?:高速道路|自動車道|有料道路))/g;
+      let m;
+      while ((m = regex.exec(fullText)) !== null) {
+        const name = m[2];
+        if (!seenWikis.has(name)) {
+          seenWikis.add(name);
+          results.push({
+            num: m[1] || "",
+            name,
+            wikiTitle: name
+          });
+        }
+      }
+    }
+
+    return results;
   }
 
   /**
@@ -343,37 +493,59 @@ const WikiParser = (() => {
       const numRaw = row[idxNum] ? cleanText(row[idxNum].cell.textContent) : "-";
       const safeNum = (numRaw === "-" || numRaw === "―" || numRaw.length > 10) ? "-" : numRaw;
 
-      let kmRaw = row[idxKm] ? cleanText(row[idxKm].cell.textContent) : "";
-      if (kmRaw === "-" || kmRaw === "―") {
-        kmRaw = "";
-      } else if (kmRaw && /^[0-9.]+$/.test(kmRaw)) {
-        kmRaw = kmRaw + "km";
-      } else if (kmRaw && /[0-9]/.test(kmRaw) && !/km/i.test(kmRaw)) {
-        kmRaw = kmRaw.replace(/([0-9]+(?:\.[0-9]+)?)/g, "$1km");
+      // 距離セル：上り線・下り線で異なる場合（<br>区切り等）を行ごとの配列として抽出
+      const rawKmLines = row[idxKm] ? extractCellLines(row[idxKm].cell) : [];
+      const kmLines = [];
+      for (const line of rawKmLines) {
+        if (line === "-" || line === "―") continue;
+        // 1行にスペース区切りで2つの数値が並んでいる場合も分割
+        const twoNums = line.match(/^([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)$/);
+        if (twoNums) {
+          kmLines.push(`${twoNums[1]}km`, `${twoNums[2]}km`);
+        } else if (/^[0-9.]+$/.test(line)) {
+          kmLines.push(`${line}km`);
+        } else if (/[0-9]/.test(line) && !/km/i.test(line)) {
+          kmLines.push(line.replace(/([0-9]+(?:\.[0-9]+)?)/g, "$1km"));
+        } else {
+          kmLines.push(line);
+        }
       }
+      const kmDisplay = kmLines.join(" / ");
 
-      const connectRaw = row[idxConnect] ? cleanText(row[idxConnect].cell.textContent) : "";
-      const noteRaw = row[idxNote] ? cleanText(row[idxNote].cell.textContent) : "";
+      // 接続路線セル：テキスト行＋高速道路リンク抽出
+      const connectLines = row[idxConnect] ? extractCellLines(row[idxConnect].cell).filter(l => l !== "-" && l !== "―") : [];
+      const connectRaw = connectLines.join(" / ");
+      const connectLinks = row[idxConnect] ? extractHighwayLinks(row[idxConnect].cell) : [];
 
-      let shortNote = "";
-      if (/事業中|建設中|予定|未開通/.test(noteRaw)) {
-        const m = noteRaw.match(/(事業中|建設中|予定|未開通)/);
-        shortNote = m ? m[1] : "";
-      } else if (noteRaw.length > 0 && noteRaw.length <= 16 && noteRaw !== "-" && noteRaw !== "―") {
-        shortNote = noteRaw;
-      }
+      // 備考セル：上り線・下り線ごとの行を保持
+      const rawNoteLines = row[idxNote] ? extractCellLines(row[idxNote].cell).filter(l => l !== "-" && l !== "―") : [];
+      const noteLines = rawNoteLines.map(nl => {
+        if (/事業中|建設中|予定|未開通/.test(nl)) {
+          const m = nl.match(/(事業中|建設中|予定|未開通)/);
+          return m ? m[1] : nl;
+        }
+        return nl.length <= 22 ? nl : "";
+      }).filter(Boolean);
+
+      const shortNote = noteLines.join(" / ");
+      const fullNote = rawNoteLines.join(" / ");
 
       list.push({
         num: safeNum,
         types: parsedFacility.types,
         badgeItems: parsedFacility.badgeItems,
+        primaryBadge: parsedFacility.primaryBadge,
         shortName: parsedFacility.shortName,
         fullName: parsedFacility.fullName,
         wikiTitle: parsedFacility.wikiTitle,
-        km: kmRaw,
+        km: kmDisplay,
+        kmLines,
         note: shortNote,
-        fullNote: (noteRaw === "-" || noteRaw === "―") ? "" : noteRaw,
-        connect: (connectRaw === "-" || connectRaw === "―") ? "" : connectRaw
+        noteLines,
+        fullNote,
+        connect: connectRaw,
+        connectLines,
+        connectLinks
       });
     }
 
@@ -629,7 +801,6 @@ const WikiParser = (() => {
         : [];
       const combinedText = [lineText, ...subTexts].join(" ");
 
-      // 1. 親項目自体が「ぷらっとパーク」「一般道側駐車場」等の場合（本線駐車枠を上書きしない）
       if (isGeneralParkingText(lineText)) {
         const gpCounts = extractParkingCounts(combinedText);
         if (gpCounts) {
@@ -647,7 +818,6 @@ const WikiParser = (() => {
         continue;
       }
 
-      // 2. 駐車場台数抽出（本線駐車枠と、子要素に混在する一般道側駐車枠を分離）
       if (/駐車場/.test(lineText)) {
         const directSubLis = nestedUl ? Array.from(nestedUl.children).filter(c => c.tagName === "LI") : [];
         const mainSubTexts = [];
@@ -669,7 +839,6 @@ const WikiParser = (() => {
           }
         }
 
-        // 1行の中に一般道側の括弧書きが混在している場合も分離
         const inlineGpMatch = combinedText.match(/([^。、（）()]*?(?:[ぷらぶ]らっとパーク|ウォークイン|ウェルカムゲート|一般道|外部駐車場)[^。、）)]*)/);
         if (inlineGpMatch && directSubLis.length === 0) {
           const gpCounts = extractParkingCounts(inlineGpMatch[1]);
@@ -699,7 +868,6 @@ const WikiParser = (() => {
         continue;
       }
 
-      // 3. トイレ・EV・ガソリンスタンド・案内所・自販機判定
       if (/^トイレ|お手洗い/.test(lineText)) {
         dirObj.hasToilet = true;
         continue;
@@ -721,7 +889,6 @@ const WikiParser = (() => {
         continue;
       }
 
-      // 4. 店舗カテゴリ判定
       const catType = detectShopCategory(lineText);
       const is24h = /24時間/.test(combinedText);
 
@@ -787,7 +954,7 @@ const WikiParser = (() => {
   }
 
   /**
-   * IC / JCT / BS 記事の「接続する道路」「歴史」を解析
+   * IC / JCT / BS 記事の「接続する道路」「歴史」を解析（高速道路リンク対応）
    */
   function parseIcJctDetail(doc) {
     const roadElems = getElementsUnderHeading(doc, ["接続する道路", "接続道路"], "H2");
@@ -801,14 +968,31 @@ const WikiParser = (() => {
 
           const natMatch = text.match(/国道(\d+)号/);
           const prefMatch = text.match(/(?:都|道|府|県)道(\d+)号/);
-          const hwMatch = text.match(/(E\d+[A-Z]?|C\d+)\s*([^（(\s]+)/);
+          const hwLinks = extractHighwayLinks(li);
 
-          if (natMatch) {
+          if (hwLinks.length > 0) {
+            const firstHw = hwLinks[0];
+            connectedRoads.push({
+              kind: "highway",
+              num: firstHw.num || "HW",
+              name: text,
+              hwName: firstHw.name,
+              wikiTitle: firstHw.wikiTitle
+            });
+          } else if (natMatch) {
             connectedRoads.push({ kind: "national", num: natMatch[1], name: text });
           } else if (prefMatch) {
             connectedRoads.push({ kind: "pref", num: prefMatch[1], name: text });
-          } else if (hwMatch || /高速道路|自動車道|首都高速|阪神高速/.test(text)) {
-            connectedRoads.push({ kind: "highway", num: hwMatch ? hwMatch[1] : "HW", name: text });
+          } else if (/高速道路|自動車道|首都高速|阪神高速|有料道路/.test(text)) {
+            const hwMatch = text.match(/(E\d+[A-Z]?|C\d+)\s*([^（(\s]+)/);
+            const hwName = hwMatch ? hwMatch[2] : text;
+            connectedRoads.push({
+              kind: "highway",
+              num: hwMatch ? hwMatch[1] : "HW",
+              name: text,
+              hwName,
+              wikiTitle: hwName
+            });
           } else {
             connectedRoads.push({ kind: "general", num: "", name: text });
           }
