@@ -9,51 +9,51 @@
   <link rel="stylesheet" href="css/pages.css" />
 </head>
 <body data-page="facility">
-  <div class="app-layout">
-    <!-- 左サイドバー（共有画像3準拠） -->
+  <div class="app-shell">
+    <!-- 左固定サイドバー -->
     <aside class="sidebar">
-      <div class="sidebar-top">
-        <button type="button" id="backToRouteBtn" class="back-btn">
-          <span class="back-btn-circle">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-          </span>
-          <span>前のページに戻る</span>
-        </button>
+      <button type="button" id="backToRouteBtn" class="back-btn" title="路線一覧へ戻る">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="15 18 9 12 15 6"></polyline>
+        </svg>
+        <span>路線へ戻る</span>
+      </button>
 
-        <div class="title-plate" id="facilityTitlePlate">
+      <!-- 高速道路 施設タイトルプレート -->
+      <div class="route-sign-plate">
+        <div class="route-sign-top">
           <span class="route-num-badge" id="facilityRouteNum">E1</span>
-          <span class="title-plate-name" id="facilityTitleName">海老名SA</span>
         </div>
+        <div class="route-sign-name" id="facilityTitleName">読み込み中...</div>
+      </div>
 
-        <nav class="sidebar-nav" aria-label="施設メニュー">
-          <button type="button" class="nav-item" data-tab="overview">概要</button>
-          <button type="button" class="nav-item active" data-tab="detail" id="facilityDetailTabBtn">施設</button>
-        </nav>
+      <!-- 表示セクション（クリックで該当位置へスクロール） -->
+      <nav class="sidebar-nav" aria-label="表示切替">
+        <button type="button" class="nav-item active" data-tab="overview">概要</button>
+        <button type="button" class="nav-item" data-tab="detail" id="facilityDetailTabBtn">施設</button>
+      </nav>
 
-        <div class="display-mode-box">
-          <div class="display-mode-label">施設表示設定</div>
-          <div class="display-mode-buttons">
-            <button type="button" class="mode-btn active" data-mode="original">オリジナル</button>
-            <button type="button" class="mode-btn" data-mode="raw">原文</button>
-          </div>
+      <!-- 表示モード切替 -->
+      <div class="display-mode-box">
+        <span class="display-mode-label">表示</span>
+        <div class="display-mode-buttons">
+          <button type="button" class="mode-btn active" data-mode="original">オリジナル</button>
+          <button type="button" class="mode-btn" data-mode="raw">Wikipedia原文</button>
         </div>
       </div>
 
       <div class="sidebar-footer">
-        記事はwikipediaより<br />引用しております。
-        <br />
-        <a id="wikiFacilitySourceLink" href="https://ja.wikipedia.org/" target="_blank" rel="noopener noreferrer">Wikipediaで原文を見る ↗</a>
+        <a id="wikiFacilitySourceLink" href="https://ja.wikipedia.org/" target="_blank" rel="noopener noreferrer">
+          Wikipediaの元記事を開く ↗
+        </a>
       </div>
     </aside>
 
-    <!-- 右側メインエリア -->
+    <!-- 右メインコンテンツ -->
     <main class="main-content" id="facilityMainContent">
       <div class="loading-box">
         <div class="spinner"></div>
-        <div>Wikipediaから施設情報を読み込んでいます...</div>
+        <p>Wikipediaから施設データを取得しています...</p>
       </div>
     </main>
   </div>
