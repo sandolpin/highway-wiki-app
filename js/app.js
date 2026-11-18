@@ -120,6 +120,63 @@ async function navigateToHighwayRoute({ num, name, wikiTitle }) {
   location.href = `route.html?${params.toString()}`;
 }
 
+/**
+ * 施設詳細画面（前後ICナビ・併設施設表示）に必要な最小限のデータのみを安全に保存する
+ * 容量上限（QuotaExceededError）時は古いキャッシュをクリアして再試行する
+ */
+function saveIcListToSession(list) {
+  const compactList = list.map(item => ({
+    num: item.num,
+    types: item.types,
+    shortName: item.shortName,
+    fullName: item.fullName,
+    km: item.km,
+    wikiTitle: item.wikiTitle,
+    sectionRouteNum: item.sectionRouteNum || "",
+    primaryBadge: item.primaryBadge ? {
+      type: item.primaryBadge.type,
+      wikiTitle: item.primaryBadge.wikiTitle,
+      label: item.primaryBadge.label,
+      shortName: item.primaryBadge.shortName || ""
+    } : null,
+    badgeItems: Array.isArray(item.badgeItems) ? item.badgeItems.map(b => ({
+      type: b.type,
+      wikiTitle: b.wikiTitle,
+      label: b.label,
+      shortName: b.shortName || ""
+    })) : [],
+    connectLinks: Array.isArray(item.connectLinks) ? item.connectLinks.map(lk => ({
+      num: lk.num || "",
+      name: lk.name || "",
+      wikiTitle: lk.wikiTitle || ""
+    })) : []
+  }));
+
+  try {
+    sessionStorage.setItem("hw_current_ic_list", JSON.stringify(compactList));
+  } catch (_) {
+    try {
+      sessionStorage.clear();
+      sessionStorage.setItem("hw_current_ic_list", JSON.stringify(compactList));
+    } catch (__) {
+      try {
+        const minimalList = compactList.map(item => ({
+          num: item.num,
+          types: item.types,
+          shortName: item.shortName,
+          fullName: item.fullName,
+          km: item.km,
+          wikiTitle: item.wikiTitle,
+          sectionRouteNum: item.sectionRouteNum
+        }));
+        sessionStorage.setItem("hw_current_ic_list", JSON.stringify(minimalList));
+      } catch (___) {
+        // ブラウザのストレージ制限が厳しい場合でも一覧表示自体は続行する
+      }
+    }
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const pageType = document.body.dataset.page;
   if (pageType === "index") {
@@ -414,7 +471,7 @@ async function initRoutePage() {
         return;
       }
 
-      sessionStorage.setItem("hw_current_ic_list", JSON.stringify(list));
+      saveIcListToSession(list);
 
       const sectionGroups = [];
       const seenGroupKeys = new Set();
@@ -473,7 +530,6 @@ async function initRoutePage() {
 
         const inactiveCls = item.isInactive ? "ic-row-inactive" : "";
 
-        // PA/SAとSICが併設されている場合など、個別の施設名が分かる表示ラベルを生成
         const displayNameText = (item.badgeItems && item.badgeItems.length > 1 &&
           item.badgeItems.some(b => ["PA", "SA"].includes(b.type)) &&
           item.badgeItems.some(b => b.type === "SIC"))
@@ -871,7 +927,6 @@ async function initFacilityPage() {
       </section>
     `;
 
-    // 左ヘッダー（概要 → 施設）と同じ順番で連続表示
     mainContent.innerHTML = `
       ${overviewSectionHtml}
       <hr class="facility-unified-divider" />
