@@ -896,3 +896,82 @@
   border-radius: 5px;
   letter-spacing: 0.04em;
 }
+
+/* 接続する道路：高速道路クリック可能カード */
+.connected-road-card.clickable-hw-card {
+  cursor: pointer;
+  border-color: #1b7837;
+  background-color: #f6fbf7;
+  justify-content: space-between;
+  transition: background-color 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+
+.connected-road-card.clickable-hw-card:hover {
+  background-color: #e4f3e8;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(27, 120, 55, 0.16);
+}
+
+.connected-road-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hw-jump-arrow {
+  font-size: 12px;
+  font-weight: 800;
+  color: #1b7837;
+  background: #ffffff;
+  border: 1px solid #1b7837;
+  border-radius: 6px;
+  padding: 3px 9px;
+  white-space: nowrap;
+}
+
+.connected-road-card.clickable-hw-card:hover .hw-jump-arrow {
+  background: #1b7837;
+  color: #ffffff;
+}
+
+/* 併設施設切替バー（例：米原IC ⇔ 北陸米原BS） */
+.co-facilities-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: #f4f8f5;
+  border: 1.5px solid #cfe0d4;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.co-facility-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1.5px solid #bbbbbb;
+  background: #ffffff;
+  color: #222222;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.14s;
+}
+
+.co-facility-chip.active {
+  border-color: var(--hw-green);
+  background: #e8f5e9;
+  color: var(--hw-green-dark);
+  cursor: default;
+}
+
+.co-facility-chip:not(.active):hover {
+  border-color: var(--hw-green);
+  background: #f0faf2;
+}
