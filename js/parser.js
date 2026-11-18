@@ -118,7 +118,6 @@ const WikiParser = (() => {
 
   /**
    * HTMLテーブルの rowspan / colspan を展開し、2次元グリッド配列に変換
-   * これにより結合セルがあっても列番号が絶対にズレない
    */
   function expandTableToGrid(table) {
     const trs = Array.from(table.querySelectorAll("tr"));
@@ -166,7 +165,6 @@ const WikiParser = (() => {
     if (/JCT|ジャンクション/i.test(text)) {
       types.push("JCT");
     }
-    // 「スマートIC」「SIC」を除いた文字列に IC / インターチェンジ があるか判定
     const textWithoutSic = text.replace(/スマートIC|SIC/gi, "");
     if (/(?<![A-Z])IC|インターチェンジ/i.test(textWithoutSic)) {
       types.push("IC");
@@ -200,7 +198,6 @@ const WikiParser = (() => {
       types = ["IC"];
     }
 
-    // セル内の全Wikipediaリンクを走査し、種別ごとの遷移先記事を特定
     const anchors = Array.from(nameCell.querySelectorAll("a[title]")).filter(a => {
       const href = a.getAttribute("href") || "";
       return !href.startsWith("#");
@@ -219,9 +216,7 @@ const WikiParser = (() => {
 
     const defaultWiki = linkInfos.length > 0 ? linkInfos[0].wikiTitle : rawName;
 
-    // 各バッジ種別ごとに最適なリンク先Wikipedia記事を割り当て
     const badgeItems = types.map(t => {
-      // 該当種別を持つリンクを探す
       const exactMatch = linkInfos.find(info => info.types.includes(t));
       if (exactMatch) {
         return {
@@ -230,7 +225,6 @@ const WikiParser = (() => {
           label: exactMatch.text || exactMatch.wikiTitle
         };
       }
-      // リンクが1つしかなく併設（例：〇〇PAにスマートIC併設でスマートIC側の記事名が推測できる場合）
       const baseName = rawName
         .replace(/(スマートIC|SIC|JCT|ジャンクション|IC|インターチェンジ|SA|サービスエリア|PA|パーキングエリア|TB|本線料金所|料金所|TN|トンネル|BS|バスストップ|バス停留所)/gi, "")
         .replace(/[\/・／（）()]+/g, "")
@@ -258,7 +252,6 @@ const WikiParser = (() => {
       };
     });
 
-    // 表示用の短い施設名（例：「横浜青葉JCT/IC」→「横浜青葉」）
     let shortName = rawName
       .replace(/(スマートIC|SIC|JCT|ジャンクション|IC|インターチェンジ|SA|サービスエリア|PA|パーキングエリア|TB|本線料金所|料金所|TN|トンネル|BS|バスストップ|バス停留所)/gi, "")
       .replace(/[\/・／]+$/g, "")
@@ -315,7 +308,6 @@ const WikiParser = (() => {
     const grid = expandTableToGrid(table);
     if (grid.length < 2) return [];
 
-    // ヘッダー行（最初の行）から列インデックスを特定
     const headerRow = grid[0] || [];
     const headerTexts = headerRow.map(slot => slot ? cleanText(slot.cell.textContent) : "");
 
@@ -337,13 +329,10 @@ const WikiParser = (() => {
       const row = grid[r];
       if (!row || row.length < 2) continue;
 
-      // 県境行など、1つのセルが横4列以上にまたがる見出し行はスキップ
       if (row[0] && row[0].colspan >= 4) continue;
 
       const nameSlot = row[idxName];
       if (!nameSlot || !nameSlot.cell) continue;
-
-      // 施設名セル自体が前の行からのrowspan継続であり、かつ備考等だけの補足行である場合はスキップ
       if (!nameSlot.isOrigin) continue;
 
       const parsedFacility = parseFacilityCell(nameSlot.cell);
@@ -352,10 +341,8 @@ const WikiParser = (() => {
       }
 
       const numRaw = row[idxNum] ? cleanText(row[idxNum].cell.textContent) : "-";
-      // IC番号欄に万が一長文が入っている場合は "-" に正規化
       const safeNum = (numRaw === "-" || numRaw === "―" || numRaw.length > 10) ? "-" : numRaw;
 
-      // キロ程整形
       let kmRaw = row[idxKm] ? cleanText(row[idxKm].cell.textContent) : "";
       if (kmRaw === "-" || kmRaw === "―") {
         kmRaw = "";
@@ -495,6 +482,44 @@ const WikiParser = (() => {
   }
 
   /**
+   * 一般道側駐車場（ぷらっとパーク / ぶらっとパーク / ウォークインゲート等）判定
+   */
+  function isGeneralParkingText(text) {
+    return /[ぷらぶ]らっとパーク|ウォークイン|ウェルカムゲート|一般道|外部駐車場|高速道路外/.test(text || "");
+  }
+
+  function getGeneralParkingLabel(text) {
+    if (/ぶらっとパーク/.test(text)) return "一般道（ぶらっとパーク）";
+    if (/ぷらっとパーク/.test(text)) return "一般道（ぷらっとパーク）";
+    if (/ウォークイン/.test(text)) return "一般道（ウォークインゲート）";
+    if (/ウェルカムゲート/.test(text)) return "一般道（ウェルカムゲート）";
+    return "一般道側駐車場";
+  }
+
+  /**
+   * テキストから大型・小型・身障者用・合計の駐車台数を抽出
+   */
+  function extractParkingCounts(text) {
+    if (!text) return null;
+    const largeM = text.match(/大型(?:車)?[^0-9]{0,6}([0-9,]+)\s*台/);
+    const smallM = text.match(/(?:小型(?:車)?|普通(?:車)?)[^0-9]{0,6}([0-9,]+)\s*台/);
+    const handiM = text.match(/(?:身障者(?:用)?|障がい者(?:用)?|車椅子)[^0-9]{0,6}([0-9,]+)\s*台/);
+
+    const large = largeM ? largeM[1] + "台" : null;
+    const small = smallM ? smallM[1] + "台" : null;
+    const handicapped = handiM ? handiM[1] + "台" : null;
+
+    let total = null;
+    if (!large && !small) {
+      const totalM = text.match(/([0-9,]+)\s*台/);
+      if (totalM) total = totalM[1] + "台";
+    }
+
+    if (!large && !small && !handicapped && !total) return null;
+    return { large, small, handicapped, total };
+  }
+
+  /**
    * 施設詳細ページ（PA/SA および IC/JCT/BS）のHTML解析
    */
   function parseFacilityPage(htmlString, isSapa) {
@@ -528,7 +553,7 @@ const WikiParser = (() => {
   }
 
   /**
-   * SA/PA記事の「施設」セクションを方面別に解析（[編集]除去・ネスト駐車場台数・表形式対応）
+   * SA/PA記事の「施設」セクションを方面別に解析
    */
   function parseSapaFacilities(doc) {
     const facilityElems = getElementsUnderHeading(doc, ["施設"], "H2");
@@ -539,6 +564,9 @@ const WikiParser = (() => {
       title,
       largeParking: null,
       smallParking: null,
+      handicappedParking: null,
+      totalParking: null,
+      generalParking: [],
       hasToilet: false,
       hasEv: false,
       hasGs: false,
@@ -574,14 +602,15 @@ const WikiParser = (() => {
       if (el.tagName === "UL") {
         parseSapaListItems(el, currentDir);
       } else if (el.tagName === "TABLE") {
-        // テーブル形式で上下線・設備が書かれているPA/SA記事への対応
         parseSapaTable(el, currentDir);
       }
     }
     pushCurrent();
 
     return directions.filter(d =>
-      d.largeParking || d.smallParking || d.hasToilet || d.hasEv || d.hasGs || d.hasInfo || d.hasVending ||
+      d.largeParking || d.smallParking || d.totalParking || d.handicappedParking ||
+      (d.generalParking && d.generalParking.length > 0) ||
+      d.hasToilet || d.hasEv || d.hasGs || d.hasInfo || d.hasVending ||
       d.categories.length > 0 || d.others.length > 0
     );
   }
@@ -595,26 +624,82 @@ const WikiParser = (() => {
       cloneLi.querySelectorAll("ul").forEach(u => u.remove());
       const lineText = cleanText(cloneLi.textContent);
 
-      // 子ULのテキストも結合して駐車台数や設備を漏らさずチェック
       const subTexts = nestedUl
         ? Array.from(nestedUl.querySelectorAll("li")).map(s => cleanText(s.textContent)).filter(Boolean)
         : [];
       const combinedText = [lineText, ...subTexts].join(" ");
 
-      // 1. 駐車場台数抽出（親LI・子ULどちらに書かれていても取得）
-      if (/駐車場/.test(lineText)) {
-        const largeM = combinedText.match(/大型[^0-9]{0,5}([0-9,]+)\s*台/);
-        const smallM = combinedText.match(/小型[^0-9]{0,5}([0-9,]+)\s*台/);
-        if (largeM) dirObj.largeParking = largeM[1] + "台";
-        if (smallM) dirObj.smallParking = smallM[1] + "台";
-        // 駐車台数が取れなかった場合のみその他へ
-        if (!largeM && !smallM && subTexts.length > 0) {
-          dirObj.others.push(`駐車場（${subTexts.join(" / ")}）`);
+      // 1. 親項目自体が「ぷらっとパーク」「一般道側駐車場」等の場合（本線駐車枠を上書きしない）
+      if (isGeneralParkingText(lineText)) {
+        const gpCounts = extractParkingCounts(combinedText);
+        if (gpCounts) {
+          dirObj.generalParking.push({
+            label: getGeneralParkingLabel(lineText),
+            ...gpCounts
+          });
+        }
+        const nonParkingNotes = subTexts.filter(st => !extractParkingCounts(st));
+        if (nonParkingNotes.length > 0) {
+          dirObj.others.push(`${lineText}（${nonParkingNotes.join(" / ")}）`);
+        } else if (!gpCounts && lineText) {
+          dirObj.others.push(lineText);
         }
         continue;
       }
 
-      // 2. トイレ・EV・ガソリンスタンド・案内所・自販機判定
+      // 2. 駐車場台数抽出（本線駐車枠と、子要素に混在する一般道側駐車枠を分離）
+      if (/駐車場/.test(lineText)) {
+        const directSubLis = nestedUl ? Array.from(nestedUl.children).filter(c => c.tagName === "LI") : [];
+        const mainSubTexts = [];
+
+        if (directSubLis.length > 0) {
+          for (const subLi of directSubLis) {
+            const subFull = cleanText(subLi.textContent);
+            if (isGeneralParkingText(subFull)) {
+              const gpCounts = extractParkingCounts(subFull);
+              if (gpCounts) {
+                dirObj.generalParking.push({
+                  label: getGeneralParkingLabel(subFull),
+                  ...gpCounts
+                });
+              }
+            } else {
+              mainSubTexts.push(subFull);
+            }
+          }
+        }
+
+        // 1行の中に一般道側の括弧書きが混在している場合も分離
+        const inlineGpMatch = combinedText.match(/([^。、（）()]*?(?:[ぷらぶ]らっとパーク|ウォークイン|ウェルカムゲート|一般道|外部駐車場)[^。、）)]*)/);
+        if (inlineGpMatch && directSubLis.length === 0) {
+          const gpCounts = extractParkingCounts(inlineGpMatch[1]);
+          if (gpCounts) {
+            dirObj.generalParking.push({
+              label: getGeneralParkingLabel(inlineGpMatch[1]),
+              ...gpCounts
+            });
+          }
+        }
+
+        const rawMainText = directSubLis.length > 0
+          ? [lineText, ...mainSubTexts].join(" ")
+          : combinedText.replace(/[（(][^）)]*(?:[ぷらぶ]らっとパーク|ウォークイン|ウェルカムゲート|一般道|外部駐車場)[^）)]*[）)]/g, "");
+
+        const mainCounts = extractParkingCounts(rawMainText);
+        if (mainCounts) {
+          if (mainCounts.large && !dirObj.largeParking) dirObj.largeParking = mainCounts.large;
+          if (mainCounts.small && !dirObj.smallParking) dirObj.smallParking = mainCounts.small;
+          if (mainCounts.handicapped && !dirObj.handicappedParking) dirObj.handicappedParking = mainCounts.handicapped;
+          if (mainCounts.total && !dirObj.largeParking && !dirObj.smallParking && !dirObj.totalParking) {
+            dirObj.totalParking = mainCounts.total;
+          }
+        } else if (mainSubTexts.length > 0) {
+          dirObj.others.push(`駐車場（${mainSubTexts.join(" / ")}）`);
+        }
+        continue;
+      }
+
+      // 3. トイレ・EV・ガソリンスタンド・案内所・自販機判定
       if (/^トイレ|お手洗い/.test(lineText)) {
         dirObj.hasToilet = true;
         continue;
@@ -636,7 +721,7 @@ const WikiParser = (() => {
         continue;
       }
 
-      // 3. 店舗カテゴリ判定
+      // 4. 店舗カテゴリ判定
       const catType = detectShopCategory(lineText);
       const is24h = /24時間/.test(combinedText);
 
@@ -661,11 +746,24 @@ const WikiParser = (() => {
       const val = cells.slice(1).join(" / ");
       if (!label || !val) return;
 
-      if (/駐車場/.test(label)) {
-        const largeM = val.match(/大型[^0-9]{0,5}([0-9,]+)\s*台/);
-        const smallM = val.match(/小型[^0-9]{0,5}([0-9,]+)\s*台/);
-        if (largeM && !dirObj.largeParking) dirObj.largeParking = largeM[1] + "台";
-        if (smallM && !dirObj.smallParking) dirObj.smallParking = smallM[1] + "台";
+      if (isGeneralParkingText(label)) {
+        const gpCounts = extractParkingCounts(val);
+        if (gpCounts) {
+          dirObj.generalParking.push({
+            label: getGeneralParkingLabel(label),
+            ...gpCounts
+          });
+        }
+      } else if (/駐車場/.test(label)) {
+        const counts = extractParkingCounts(val);
+        if (counts) {
+          if (counts.large && !dirObj.largeParking) dirObj.largeParking = counts.large;
+          if (counts.small && !dirObj.smallParking) dirObj.smallParking = counts.small;
+          if (counts.handicapped && !dirObj.handicappedParking) dirObj.handicappedParking = counts.handicapped;
+          if (counts.total && !dirObj.largeParking && !dirObj.smallParking && !dirObj.totalParking) {
+            dirObj.totalParking = counts.total;
+          }
+        }
       } else if (/トイレ/.test(label)) {
         dirObj.hasToilet = true;
       } else if (/給油|ガソリン/.test(label)) {
