@@ -2,6 +2,40 @@
    pages.css : トップページ・路線詳細・施設詳細の固有レイアウト
    ========================================================= */
 
+/* ----- 路線詳細・施設詳細の共通2カラムレイアウト補正 ----- */
+body[data-page="route"] aside,
+body[data-page="facility"] aside,
+body[data-page="route"] .sidebar,
+body[data-page="facility"] .sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 220px;
+  height: 100vh;
+  overflow-y: auto;
+  background-color: #ffffff;
+  border-right: 1.5px solid #e2e6e4;
+  z-index: 100;
+  box-sizing: border-box;
+}
+
+body[data-page="route"] aside + *,
+body[data-page="facility"] aside + *,
+body[data-page="route"] .sidebar + *,
+body[data-page="facility"] .sidebar + * {
+  margin-left: 220px !important;
+  width: calc(100% - 220px) !important;
+  max-width: none !important;
+  padding: 28px 36px 64px !important;
+  box-sizing: border-box !important;
+}
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
 /* ----- トップ画面 (index.html) ----- */
 .top-header {
   background: linear-gradient(135deg, #145a32 0%, #1b7837 60%, #238b45 100%);
@@ -1364,7 +1398,25 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
+  body[data-page="route"] aside,
+  body[data-page="facility"] aside,
+  body[data-page="route"] .sidebar,
+  body[data-page="facility"] .sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1.5px solid #e2e6e4;
+  }
+  body[data-page="route"] aside + *,
+  body[data-page="facility"] aside + *,
+  body[data-page="route"] .sidebar + *,
+  body[data-page="facility"] .sidebar + * {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: 20px 16px 48px !important;
+  }
   .status-table-header,
   .status-row {
     grid-template-columns: 1fr;
