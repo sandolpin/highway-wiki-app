@@ -2,7 +2,7 @@
    pages.css : トップページ・路線詳細・施設詳細の固有レイアウト
    ========================================================= */
 
-/* ----- 路線詳細・施設詳細の共通2カラムレイアウト補正 ----- */
+/* ----- 路線詳細・施設詳細の共通2カラムレイアウト＆サイドバー補正 ----- */
 body[data-page="route"] aside,
 body[data-page="facility"] aside,
 body[data-page="route"] .sidebar,
@@ -17,6 +17,9 @@ body[data-page="facility"] .sidebar {
   border-right: 1.5px solid #e2e6e4;
   z-index: 100;
   box-sizing: border-box;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
 }
 
 body[data-page="route"] aside + *,
@@ -30,10 +33,141 @@ body[data-page="facility"] .sidebar + * {
   box-sizing: border-box !important;
 }
 
+/* サイドバー内の戻るボタン＆アイコンサイズ固定（巨大化防止） */
+#backToRouteBtn,
+.back-btn,
+.sidebar-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #1a1a1a;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+#backToRouteBtn:hover,
+.back-btn:hover,
+.sidebar-back-btn:hover {
+  color: #1b7837;
+}
+
+#backToRouteBtn svg,
+.back-btn svg,
+.sidebar-back-btn svg,
+aside svg,
+.sidebar svg {
+  width: 20px !important;
+  height: 20px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  flex-shrink: 0;
+}
+
 .sidebar-nav ul {
   list-style: none;
   padding: 0;
   margin: 0;
+}
+
+/* ----- 施設種別カラーバッジ & 路線番号プレート ----- */
+.route-num-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #1b7837;
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 13px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  flex-shrink: 0;
+}
+
+.route-num-badge.urban {
+  background-color: #0068b7;
+}
+
+.facility-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.f-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 900;
+  color: #ffffff;
+  background-color: #1b7837;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  box-sizing: border-box;
+  border: 1.5px solid transparent;
+}
+
+.f-badge.badge-ic {
+  background-color: #1b7837;
+  color: #ffffff;
+}
+
+.f-badge.badge-jct {
+  background-color: #e65100;
+  color: #ffffff;
+}
+
+.f-badge.badge-sa {
+  background-color: #1565c0;
+  color: #ffffff;
+}
+
+.f-badge.badge-pa {
+  background-color: #0277bd;
+  color: #ffffff;
+}
+
+.f-badge.badge-sic {
+  background-color: #2e7d32;
+  color: #ffffff;
+}
+
+.f-badge.badge-bs {
+  background-color: #5e35b1;
+  color: #ffffff;
+}
+
+.f-badge.badge-tb {
+  background-color: #ad1457;
+  color: #ffffff;
+}
+
+.f-badge.badge-tn {
+  background-color: #455a64;
+  color: #ffffff;
+}
+
+.f-badge.clickable-badge {
+  cursor: pointer;
+  transition: transform 0.12s, filter 0.12s;
+}
+
+.f-badge.clickable-badge:hover {
+  transform: scale(1.08);
+  filter: brightness(1.08);
 }
 
 /* ----- トップ画面 (index.html) ----- */
