@@ -8,9 +8,19 @@ const WikiParser = (() => {
    */
   function cleanText(str) {
     return (str || "")
-      .replace(/\[\s*(?:注釈?|出典|要出典|リンク切れ)?\s*\d*\s*\]/g, "")
+      .replace(/\[\s*(?:注釈?\vert{}出典\vert{}要出典\vert{}リンク切れ)?\s*\d*\s*\]/g, "")
       .replace(/\s+/g, " ")
       .trim();
+  }
+
+  /**
+   * 要素内の <style> / <script> / 注釈などを除去した上でクリーンなテキストを取得
+   */
+  function extractCleanElementText(el) {
+    if (!el) return "";
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll("style, script, .mw-editsection, .mw-editsection-bracket, sup.reference").forEach(n => n.remove());
+    return cleanText(clone.textContent);
   }
 
   /**
@@ -39,10 +49,7 @@ const WikiParser = (() => {
    * 見出し要素から [編集 | ソースを編集] を完全除去してテキスト取得
    */
   function cleanHeadingText(el) {
-    if (!el) return "";
-    const clone = el.cloneNode(true);
-    clone.querySelectorAll(".mw-editsection, .mw-editsection-bracket, script, style").forEach(n => n.remove());
-    return cleanText(clone.textContent);
+    return extractCleanElementText(el);
   }
 
   /**
@@ -61,7 +68,7 @@ const WikiParser = (() => {
   }
 
   /**
-   * 基礎情報ボックス (table.infobox) からキー・バリューを抽出
+   * 基礎情報ボックス (table.infobox) からキー・バリューを抽出（内蔵<style>タグを除去）
    */
   function extractInfobox(doc) {
     const rows = [];
@@ -72,8 +79,8 @@ const WikiParser = (() => {
       const th = tr.querySelector("th");
       const td = tr.querySelector("td");
       if (th && td) {
-        const key = cleanText(th.textContent);
-        const val = cleanText(td.textContent);
+        const key = extractCleanElementText(th);
+        const val = extractCleanElementText(td);
         if (key && val && key.length < 25) {
           rows.push({ key, val });
         }
@@ -91,7 +98,7 @@ const WikiParser = (() => {
     for (const child of root.children) {
       if (child.tagName === "H2" || child.classList.contains("mw-heading2")) break;
       if (child.tagName === "P") {
-        const text = cleanText(child.textContent);
+        const text = extractCleanElementText(child);
         if (text.length > 15) {
           paragraphs.push(text);
         }
@@ -244,11 +251,11 @@ const WikiParser = (() => {
   };
 
   /**
-   * 施設名セルから表示名・種別・個別リンクを解析（PA+SIC併設時のSIC名補完にも対応）
+   * 施設名セルから表示名・種別・個別リンクを解析
    */
   function parseFacilityCell(nameCell) {
     const lines = extractCellLines(nameCell);
-    const rawName = lines.join(" ") || cleanText(nameCell.textContent);
+    const rawName = lines.join(" ") || extractCleanElementText(nameCell);
     let types = detectTypesFromText(rawName);
     if (types.length === 0) {
       types = ["IC"];
@@ -387,13 +394,12 @@ const WikiParser = (() => {
 
   /**
    * 高速道路・有料道路へのリンクかどうかを判定し、路線番号・正式路線名・Wikiタイトルを抽出
-   * （E1 などの番号記号だけのリンクテキストに引きずられて路線名が消えるのを防止）
    */
   function extractHighwayLinks(containerEl) {
     if (!containerEl) return [];
     const results = [];
     const byWiki = new Map();
-    const fullText = cleanText(containerEl.textContent);
+    const fullText = extractCleanElementText(containerEl);
 
     const isRouteCodeOnly = (str) => /^(E\d+[A-Z]?|C\d+[A-Z]?|CA|HW)$/i.test((str || "").trim());
 
@@ -478,16 +484,13 @@ const WikiParser = (() => {
     return results;
   }
 
-  /**
-   * テキストから路線ナンバリング（E19, E20, E68, C1 等）を抽出
-   */
   function extractRouteNumbersFromText(text) {
     const matches = cleanText(text).match(/\b(E\d+[A-Z]?|C\d+[A-Z]?|CA)\b/g);
     return matches ? Array.from(new Set(matches)) : [];
   }
 
   /**
-   * 路線ページのHTML解析（複数テーブル・ナンバリング変化・支線/連絡路・つづき路線対応）
+   * 路線ページのHTML解析
    */
   function parseRoutePage(htmlString) {
     const parser = new DOMParser();
@@ -593,7 +596,7 @@ const WikiParser = (() => {
     }
 
     for (const el of postTableElements) {
-      const txt = cleanText(el.textContent);
+      const txt = extractCleanElementText(el);
       if (/直結|直通|連続|接続|つづき|続き|方面/.test(txt)) {
         const hwLinks = extractHighwayLinks(el);
         for (const lk of hwLinks) {
@@ -636,7 +639,19 @@ const WikiParser = (() => {
   }
 
   /**
-   * 施設行の「未開通・事業中・廃止」状態を、本体（PA/SA/IC/JCT）と併設サブ施設（SIC/BS）に分けて判定
+   * 備考行が「併設BSや料金所など、本体以外の特定施設のみの廃止」かを判定して短縮ラベルを返す
+   */
+  function extractSubFacilityAbolishLabel(line) {
+    const m = line.match(/([^\s、。（()）]{1,14}(?:BS|バスストップ|バス停留所|バス停|料金所|TB))\s*(?:は|が)?[^。、]*?(廃止|閉鎖|休止)/);
+    if (m) {
+      return `${m[1]}${m[2]}`;
+    }
+    return null;
+  }
+
+  /**
+   * 施設行の「未開通・事業中・廃止」状態を、本体（IC/JCT/SA/PA）と併設サブ施設（SIC/BS）に分けて判定
+   * （例：横浜町田ICの備考にある「横浜BSは廃止」でIC本体が廃止扱いになるのを防ぐ）
    */
   function evaluateFacilityStatus(parsedFacility, rawNoteLines, kmLines) {
     const statusRegex = /(廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)/;
@@ -644,7 +659,8 @@ const WikiParser = (() => {
     const unopenedRegex = /(未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)/;
 
     const fullName = parsedFacility.fullName || "";
-    const noteText = rawNoteLines.join(" / ");
+    const filteredNoteLines = rawNoteLines.filter(ln => !extractSubFacilityAbolishLabel(ln));
+    const noteText = filteredNoteLines.join(" / ");
     const combined = `${fullName} ${noteText}`;
 
     const types = parsedFacility.types || [];
@@ -738,7 +754,7 @@ const WikiParser = (() => {
 
       if (row[0] && row[0].colspan >= 4) {
         const bannerCell = row[0].cell;
-        const bannerText = cleanText(bannerCell.textContent);
+        const bannerText = extractCleanElementText(bannerCell);
         if (!bannerText) continue;
 
         if ((r === 1 || r >= grid.length - 2) && /直結|直通|連続|方面/.test(bannerText)) {
@@ -800,6 +816,9 @@ const WikiParser = (() => {
 
       const rawNoteLines = row[idxNote] ? extractCellLines(row[idxNote].cell).filter(l => l !== "-" && l !== "―") : [];
       const noteLines = rawNoteLines.map(nl => {
+        const subAbolish = extractSubFacilityAbolishLabel(nl);
+        if (subAbolish) return subAbolish;
+
         if (/廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中/.test(nl)) {
           if (nl.length <= 16) return nl;
           const m = nl.match(/((?:スマートIC|SIC|BS)?(?:は)?(?:廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中))/);
@@ -853,10 +872,10 @@ const WikiParser = (() => {
         const row = grid[r];
         if (!row || row.length < 2) continue;
 
-        const sectionText = row[0] ? cleanText(row[0].cell.textContent) : "";
+        const sectionText = row[0] ? extractCleanElementText(row[0].cell) : "";
         if (!sectionText || sectionText.includes("区間")) continue;
 
-        const laneCellText = row[1] ? cleanText(row[1].cell.textContent) : "";
+        const laneCellText = row[1] ? extractCleanElementText(row[1].cell) : "";
         let upLanes = 2;
         let downLanes = 2;
         const plusMatch = laneCellText.match(/(\d)\s*[\+＋]\s*(\d)/);
@@ -872,7 +891,7 @@ const WikiParser = (() => {
           }
         }
 
-        const speedCellText = row[2] ? cleanText(row[2].cell.textContent) : "";
+        const speedCellText = row[2] ? extractCleanElementText(row[2].cell) : "";
         const speeds = parseSpeedText(speedCellText);
         const speedKey = JSON.stringify(speeds);
 
@@ -900,7 +919,7 @@ const WikiParser = (() => {
           paragraphs: []
         };
       } else if (el.tagName === "P" && currentSub) {
-        const txt = cleanText(el.textContent);
+        const txt = extractCleanElementText(el);
         if (txt.length > 10) {
           currentSub.paragraphs.push(txt);
         }
@@ -1063,11 +1082,11 @@ const WikiParser = (() => {
     for (const li of topLis) {
       const nestedUl = li.querySelector("ul");
       const cloneLi = li.cloneNode(true);
-      cloneLi.querySelectorAll("ul").forEach(u => u.remove());
+      cloneLi.querySelectorAll("ul, style, script, sup.reference").forEach(u => u.remove());
       const lineText = cleanText(cloneLi.textContent);
 
       const subTexts = nestedUl
-        ? Array.from(nestedUl.querySelectorAll("li")).map(s => cleanText(s.textContent)).filter(Boolean)
+        ? Array.from(nestedUl.querySelectorAll("li")).map(s => extractCleanElementText(s)).filter(Boolean)
         : [];
       const combinedText = [lineText, ...subTexts].join(" ");
 
@@ -1094,7 +1113,7 @@ const WikiParser = (() => {
 
         if (directSubLis.length > 0) {
           for (const subLi of directSubLis) {
-            const subFull = cleanText(subLi.textContent);
+            const subFull = extractCleanElementText(subLi);
             if (isGeneralParkingText(subFull)) {
               const gpCounts = extractParkingCounts(subFull);
               if (gpCounts) {
@@ -1177,7 +1196,7 @@ const WikiParser = (() => {
 
   function parseSapaTable(table, dirObj) {
     table.querySelectorAll("tr").forEach(tr => {
-      const cells = Array.from(tr.querySelectorAll("th, td")).map(c => cleanText(c.textContent));
+      const cells = Array.from(tr.querySelectorAll("th, td")).map(c => extractCleanElementText(c));
       if (cells.length < 2) return;
       const label = cells[0];
       const val = cells.slice(1).join(" / ");
@@ -1230,7 +1249,7 @@ const WikiParser = (() => {
     roadElems.forEach(el => {
       if (el.tagName === "UL") {
         el.querySelectorAll("li").forEach(li => {
-          const text = cleanText(li.textContent);
+          const text = extractCleanElementText(li);
           if (!text) return;
 
           const natMatch = text.match(/国道(\d+)号/);
@@ -1272,7 +1291,7 @@ const WikiParser = (() => {
     historyElems.forEach(el => {
       if (el.tagName === "UL") {
         el.querySelectorAll("li").forEach(li => {
-          const t = cleanText(li.textContent);
+          const t = extractCleanElementText(li);
           if (t) historyItems.push(t);
         });
       }
