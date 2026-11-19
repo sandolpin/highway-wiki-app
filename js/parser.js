@@ -221,9 +221,6 @@ const WikiParser = (() => {
       .trim();
   }
 
-  /**
-   * 種別コードに対する標準短縮サフィックス（SIC, PA 等）とWikipedia記事用サフィックス
-   */
   const TYPE_SHORT_SUFFIX = {
     PA: "PA",
     SA: "SA",
@@ -281,7 +278,6 @@ const WikiParser = (() => {
       }
     }
 
-    // ベース名（地名）の抽出：PA/SA/IC等の主施設から地名を取り、SIC単独トークンに地名が無い場合も必ず補完できるようにする
     let fallbackBase = "";
     for (const tok of lineTokens) {
       const stripped = stripFacilitySuffix(tok.text);
@@ -308,7 +304,6 @@ const WikiParser = (() => {
         const strippedWiki = stripFacilitySuffix(exactMatch.wikiTitle);
         const sName = strippedTok || strippedWiki || fallbackBase;
 
-        // トークン表示が "SIC" や "スマートIC" のみで地名が省略されている場合、地名を補完する
         let label = "";
         if (strippedTok) {
           label = rawTok.replace(/[（(][^）)]*(?:廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)[^）)]*[）)]/g, "").trim();
@@ -391,16 +386,19 @@ const WikiParser = (() => {
   }
 
   /**
-   * 高速道路・有料道路へのリンクかどうかを判定し、路線番号とWikiタイトルを抽出
+   * 高速道路・有料道路へのリンクかどうかを判定し、路線番号・正式路線名・Wikiタイトルを抽出
+   * （E1 などの番号記号だけのリンクテキストに引きずられて路線名が消えるのを防止）
    */
   function extractHighwayLinks(containerEl) {
     if (!containerEl) return [];
     const results = [];
-    const seenWikis = new Set();
+    const byWiki = new Map();
     const fullText = cleanText(containerEl.textContent);
 
+    const isRouteCodeOnly = (str) => /^(E\d+[A-Z]?|C\d+[A-Z]?|CA|HW)$/i.test((str || "").trim());
+
     const isHighwayName = (str) => {
-      if (!str) return false;
+      if (!str || isRouteCodeOnly(str)) return false;
       if (/国道\d+号|(?:都|道|府|県)道\d+号|市道|町道|村道|連絡歩道/.test(str)) return false;
       return /(高速道路|自動車道|有料道路|道路|首都高速|阪神高速|名古屋高速|福岡高速|北九州高速|広島高速|アクアライン|バイパス|新道|圏央道|外環道|新東名|新名神)/.test(str);
     };
@@ -411,29 +409,52 @@ const WikiParser = (() => {
     });
 
     for (const a of anchors) {
-      const linkText = cleanText(a.textContent);
-      const titleAttr = (a.getAttribute("title") || "").replace(/\s*\(存在しないページ\)/g, "").trim();
-      const targetName = isHighwayName(titleAttr) ? titleAttr : (isHighwayName(linkText) ? linkText : "");
+      const rawLinkText = cleanText(a.textContent);
+      const codeInLink = isRouteCodeOnly(rawLinkText) ? rawLinkText.toUpperCase() : "";
+      const linkText = codeInLink ? "" : rawLinkText;
 
-      if (targetName && !seenWikis.has(titleAttr || linkText)) {
-        const wikiTitle = titleAttr || linkText;
-        seenWikis.add(wikiTitle);
+      const titleAttr = (a.getAttribute("title") || "")
+        .replace(/\s*\(存在しないページ\)/g, "")
+        .trim();
+      const cleanTitle = isRouteCodeOnly(titleAttr) ? "" : titleAttr;
 
-        let routeNum = "";
-        const escapedLink = linkText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const numBeforeMatch = fullText.match(new RegExp(`(E\\d+[A-Z]?|C\\d+[A-Z]?|CA)\\s*${escapedLink}`));
+      const targetName = isHighwayName(cleanTitle)
+        ? cleanTitle
+        : (isHighwayName(linkText) ? linkText : "");
+
+      if (!targetName) continue;
+
+      const wikiTitle = cleanTitle || linkText || targetName;
+      const resolvedName = linkText || cleanTitle || targetName;
+
+      let routeNum = codeInLink;
+      if (!routeNum) {
+        const escapedName = resolvedName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const numBeforeMatch = fullText.match(new RegExp(`(E\\d+[A-Z]?|C\\d+[A-Z]?|CA)\\s*${escapedName}`));
         if (numBeforeMatch) {
           routeNum = numBeforeMatch[1];
         } else {
-          const selfNumMatch = `${linkText} ${titleAttr}`.match(/\b(E\d+[A-Z]?|C\d+[A-Z]?|CA)\b/);
+          const selfNumMatch = `${rawLinkText} ${titleAttr}`.match(/\b(E\d+[A-Z]?|C\d+[A-Z]?|CA)\b/);
           if (selfNumMatch) routeNum = selfNumMatch[1];
         }
+      }
 
-        results.push({
+      if (byWiki.has(wikiTitle)) {
+        const existing = byWiki.get(wikiTitle);
+        if (!existing.num && routeNum) {
+          existing.num = routeNum;
+        }
+        if (linkText && !isRouteCodeOnly(linkText)) {
+          existing.name = linkText;
+        }
+      } else {
+        const entry = {
           num: routeNum,
-          name: linkText || titleAttr,
+          name: resolvedName,
           wikiTitle
-        });
+        };
+        byWiki.set(wikiTitle, entry);
+        results.push(entry);
       }
     }
 
@@ -442,13 +463,14 @@ const WikiParser = (() => {
       let m;
       while ((m = regex.exec(fullText)) !== null) {
         const name = m[2];
-        if (!seenWikis.has(name)) {
-          seenWikis.add(name);
-          results.push({
+        if (!byWiki.has(name)) {
+          const entry = {
             num: m[1] || "",
             name,
             wikiTitle: name
-          });
+          };
+          byWiki.set(name, entry);
+          results.push(entry);
         }
       }
     }
@@ -552,7 +574,7 @@ const WikiParser = (() => {
       seenContWikis.add(lk.wikiTitle);
       continuations.push({
         num: lk.num || "",
-        name: lk.name,
+        name: lk.name || lk.wikiTitle,
         wikiTitle: lk.wikiTitle,
         note: noteText || "直結・連続する道路"
       });
@@ -630,7 +652,6 @@ const WikiParser = (() => {
     const hasSubType = types.some(t => ["SIC", "BS"].includes(t));
     const hasValidKm = Array.isArray(kmLines) && kmLines.some(k => /\d/.test(k));
 
-    // 単一施設（併設なし）の場合
     if (!(hasMainOpenedType && hasSubType)) {
       const isAbolished = abolishRegex.test(combined);
       const isUnopened = unopenedRegex.test(combined);
@@ -644,8 +665,6 @@ const WikiParser = (() => {
       };
     }
 
-    // PA/SA/IC と SIC/BS が併設されている場合
-    // 1) まず SIC や BS だけを指している状態記述を判定
     const sicOnlyInactive =
       /(?:スマートIC|SIC)[^。、/／]*?(?:廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)/.test(combined) ||
       /(?:廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)[^。、/／]*?(?:スマートIC|SIC)/.test(combined);
@@ -654,13 +673,11 @@ const WikiParser = (() => {
       /(?:バスストップ|バス停留所|バス停|BS)[^。、/／]*?(?:廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)/.test(combined) ||
       /(?:廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)[^。、/／]*?(?:バスストップ|バス停留所|バス停|BS)/.test(combined);
 
-    // 2) SIC/BS限定の状態文言を取り除いたテキストに、PA/SA/IC本体への「廃止・未開通」が残っているか確認
     const cleanedForMain = combined
       .replace(/(?:スマートIC|SIC|バスストップ|バス停留所|バス停|BS)[^。、/／]*?(?:廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)/g, "")
       .replace(/(?:廃止|閉鎖|休止|未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)[^。、/／]*?(?:スマートIC|SIC|バスストップ|バス停留所|バス停|BS)/g, "");
 
     const mainExplicitAbolished = abolishRegex.test(cleanedForMain);
-    // キロ程が既にあり、PA/SA等が開設済みで備考欄に単に「事業中」「建設中」「予定」とある場合は併設SIC側の状態とみなす
     const mainExplicitUnopened =
       /(?:PA|SA|IC|JCT|パーキングエリア|サービスエリア|インターチェンジ|ジャンクション)[^。、/／]*?(?:未開通|事業中|建設中|建設予定|開通予定|供用予定|予定|計画中|整備中)/.test(cleanedForMain) ||
       (!hasValidKm && unopenedRegex.test(cleanedForMain));
@@ -669,7 +686,6 @@ const WikiParser = (() => {
     const rowIsUnopened = mainExplicitUnopened;
     const rowIsInactive = rowIsAbolished || rowIsUnopened;
 
-    // 各バッジ個別の活性状態をセット
     parsedFacility.badgeItems.forEach(b => {
       if (rowIsInactive) {
         b.isInactive = true;
@@ -795,7 +811,6 @@ const WikiParser = (() => {
       const shortNote = noteLines.join(" / ");
       const fullNote = rawNoteLines.join(" / ");
 
-      // 未開通・廃止・建設予定の判定（PA開通済み・SIC事業中の分離対応）
       const statusResult = evaluateFacilityStatus(parsedFacility, rawNoteLines, kmLines);
 
       list.push({
@@ -825,9 +840,6 @@ const WikiParser = (() => {
     return { rows: list, continuations };
   }
 
-  /**
-   * 路線状況（車線数・最高速度の表 ＋ サブセクション解説）を解析
-   */
   function parseRouteStatus(elements) {
     const laneSpeedRows = [];
     const proseSections = [];
