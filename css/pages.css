@@ -28,7 +28,7 @@
 
 .top-brand-sign {
   background-color: #ffffff;
-  color: var(--hw-green);
+  color: var(--hw-green, #1b7837);
   font-weight: 900;
   font-size: 20px;
   padding: 6px 12px;
@@ -91,12 +91,13 @@
   border: 2px solid #c4d1c8;
   border-radius: 10px;
   background-color: #ffffff;
+  color: #1a1a1a;
   outline: none;
   transition: border-color 0.15s;
 }
 
 .search-input:focus {
-  border-color: var(--hw-green);
+  border-color: var(--hw-green, #1b7837);
 }
 
 .direct-wiki-form {
@@ -112,10 +113,11 @@
   border: 2px solid #c4d1c8;
   border-radius: 10px;
   background-color: #ffffff;
+  color: #1a1a1a;
 }
 
 .direct-wiki-btn {
-  background-color: var(--hw-green);
+  background-color: var(--hw-green, #1b7837);
   color: #ffffff;
   border: none;
   border-radius: 10px;
@@ -127,7 +129,7 @@
 }
 
 .direct-wiki-btn:hover {
-  background-color: var(--hw-green-dark);
+  background-color: var(--hw-green-dark, #145a32);
 }
 
 .filter-pills {
@@ -150,8 +152,8 @@
 }
 
 .filter-pill.active {
-  background-color: var(--hw-green);
-  border-color: var(--hw-green);
+  background-color: var(--hw-green, #1b7837);
+  border-color: var(--hw-green, #1b7837);
   color: #ffffff;
 }
 
@@ -182,13 +184,13 @@
 .map-card-title {
   font-size: 15px;
   font-weight: 900;
-  color: var(--hw-green-dark);
+  color: var(--hw-green-dark, #145a32);
 }
 
 .map-reset-btn {
   font-size: 12px;
   font-weight: 700;
-  color: var(--hw-green);
+  color: var(--hw-green, #1b7837);
   background: #e8f5e9;
   border: 1px solid #b7dfbe;
   padding: 4px 10px;
@@ -253,11 +255,12 @@
 .routes-section-title {
   font-size: 19px;
   font-weight: 900;
+  color: var(--text-main, #1a1a1a);
 }
 
 .routes-count-badge {
   background-color: #e8f5e9;
-  color: var(--hw-green);
+  color: var(--hw-green, #1b7837);
   font-weight: 800;
   font-size: 13px;
   padding: 4px 12px;
@@ -285,7 +288,7 @@
 
 .route-card:hover {
   transform: translateY(-2px);
-  border-color: var(--hw-green);
+  border-color: var(--hw-green, #1b7837);
   box-shadow: 0 6px 16px rgba(27, 120, 55, 0.12);
 }
 
@@ -298,12 +301,12 @@
 .route-card-name {
   font-size: 17px;
   font-weight: 900;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .route-card-meta {
   font-size: 12.5px;
-  color: var(--text-sub);
+  color: var(--text-sub, #555555);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -339,7 +342,7 @@
   padding: 0 18px 10px;
   font-size: 13px;
   font-weight: 800;
-  color: var(--text-sub);
+  color: var(--text-sub, #555555);
   text-align: center;
 }
 
@@ -355,7 +358,7 @@
   gap: 12px;
   align-items: center;
   padding: 13px 18px;
-  border: 2px solid var(--border-dark);
+  border: 2px solid var(--border-dark, #222222);
   border-radius: 14px;
   background-color: #ffffff;
   cursor: pointer;
@@ -364,7 +367,7 @@
 
 .ic-row-card:hover {
   background-color: #f3faf5;
-  border-color: var(--hw-green);
+  border-color: var(--hw-green, #1b7837);
   transform: translateX(3px);
   box-shadow: 0 3px 10px rgba(27, 120, 55, 0.1);
 }
@@ -373,7 +376,7 @@
   font-size: 18px;
   font-weight: 900;
   text-align: center;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .ic-col-name {
@@ -382,7 +385,7 @@
   gap: 10px;
   font-size: 17px;
   font-weight: 900;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
   flex-wrap: wrap;
 }
 
@@ -390,14 +393,14 @@
   font-size: 15px;
   font-weight: 800;
   text-align: center;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .ic-col-note {
   font-size: 12.5px;
   font-weight: 800;
   text-align: center;
-  color: var(--text-sub);
+  color: var(--text-sub, #555555);
   line-height: 1.35;
 }
 
@@ -405,7 +408,7 @@
   font-size: 13.5px;
   font-weight: 800;
   text-align: center;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
   line-height: 1.35;
 }
 
@@ -433,6 +436,13 @@
 .ic-row-card.ic-row-inactive .f-badge {
   filter: grayscale(85%);
   opacity: 0.72;
+}
+
+/* 営業中PA/ICに併設された未開通・事業中SIC/BSの個別バッジ表示 */
+.f-badge.f-badge-inactive {
+  filter: grayscale(85%);
+  opacity: 0.62;
+  border-style: dashed;
 }
 
 /* ----- 支線・連絡路・ナンバリング切替タブ＆区間見出し ----- */
@@ -464,13 +474,13 @@
 }
 
 .ic-branch-tab-btn:hover:not(.active) {
-  border-color: var(--hw-green);
-  color: var(--hw-green);
+  border-color: var(--hw-green, #1b7837);
+  color: var(--hw-green, #1b7837);
 }
 
 .ic-branch-tab-btn.active {
-  background-color: var(--hw-green);
-  border-color: var(--hw-green);
+  background-color: var(--hw-green, #1b7837);
+  border-color: var(--hw-green, #1b7837);
   color: #ffffff;
 }
 
@@ -495,11 +505,11 @@
   margin: 14px 0 4px;
   padding: 8px 14px;
   background: linear-gradient(90deg, #e8f5e9 0%, #f7faf8 100%);
-  border-left: 5px solid var(--hw-green);
+  border-left: 5px solid var(--hw-green, #1b7837);
   border-radius: 8px;
   font-size: 15px;
   font-weight: 900;
-  color: var(--hw-green-dark);
+  color: var(--hw-green-dark, #145a32);
 }
 
 .ic-section-divider:first-child {
@@ -511,7 +521,7 @@
   margin-top: 22px;
   padding: 16px 18px;
   background-color: #f4f9f5;
-  border: 2px solid var(--hw-green);
+  border: 2px solid var(--hw-green, #1b7837);
   border-radius: 14px;
 }
 
@@ -521,7 +531,7 @@
   gap: 8px;
   font-size: 14.5px;
   font-weight: 900;
-  color: var(--hw-green-dark);
+  color: var(--hw-green-dark, #145a32);
   margin-bottom: 12px;
 }
 
@@ -538,7 +548,7 @@
   gap: 12px;
   padding: 11px 16px;
   background-color: #ffffff;
-  border: 1.8px solid var(--hw-green);
+  border: 1.8px solid var(--hw-green, #1b7837);
   border-radius: 10px;
   cursor: pointer;
   transition: background-color 0.15s, transform 0.12s, box-shadow 0.15s;
@@ -560,13 +570,13 @@
 .route-continuation-name {
   font-size: 16px;
   font-weight: 900;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .route-continuation-note {
   font-size: 12.5px;
   font-weight: 700;
-  color: var(--text-sub);
+  color: var(--text-sub, #555555);
 }
 
 /* ----- 路線詳細画面：路線状況（車線数・最高速度） ----- */
@@ -574,7 +584,7 @@
   font-size: 23px;
   font-weight: 900;
   margin-bottom: 18px;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .status-table-header {
@@ -585,7 +595,7 @@
   margin-bottom: 14px;
   font-size: 13.5px;
   font-weight: 800;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .status-header-col {
@@ -618,7 +628,7 @@
 .status-section-name {
   font-size: 17px;
   font-weight: 900;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
   line-height: 1.4;
 }
 
@@ -671,7 +681,7 @@
 .speed-sign-label {
   font-size: 11px;
   font-weight: 800;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
   white-space: nowrap;
 }
 
@@ -702,7 +712,7 @@
   font-size: 18px;
   font-weight: 900;
   margin-bottom: 10px;
-  color: var(--hw-green-dark);
+  color: var(--hw-green-dark, #145a32);
 }
 
 .wiki-prose-block p {
@@ -723,7 +733,7 @@
 .overview-card h2 {
   font-size: 20px;
   font-weight: 900;
-  color: var(--hw-green-dark);
+  color: var(--hw-green-dark, #145a32);
   margin-bottom: 12px;
 }
 
@@ -750,19 +760,19 @@
 .infobox-key {
   font-size: 11.5px;
   font-weight: 800;
-  color: var(--text-sub);
+  color: var(--text-sub, #555555);
   margin-bottom: 3px;
 }
 
 .infobox-val {
   font-size: 14px;
   font-weight: 800;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 /* ----- 施設詳細画面：PA/SA 施設ボックス (facility.html) ----- */
 .sapa-section-box {
-  border: 2px solid var(--border-dark);
+  border: 2px solid var(--border-dark, #222222);
   border-radius: 16px;
   padding: 22px 24px;
   margin-bottom: 24px;
@@ -773,7 +783,7 @@
   font-size: 21px;
   font-weight: 900;
   margin-bottom: 16px;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .sapa-top-metrics {
@@ -820,7 +830,7 @@
 .amenity-icon-card {
   width: 52px;
   height: 52px;
-  border: 2px solid var(--border-dark);
+  border: 2px solid var(--border-dark, #222222);
   border-radius: 11px;
   display: flex;
   flex-direction: column;
@@ -830,7 +840,7 @@
   background-color: #ffffff;
   font-size: 10px;
   font-weight: 900;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .amenity-icon-card svg {
@@ -842,7 +852,7 @@
   font-size: 15px;
   font-weight: 900;
   margin: 14px 0 10px;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .sapa-categories-grid {
@@ -852,7 +862,7 @@
 }
 
 .sapa-category-card {
-  border: 2px solid var(--border-dark);
+  border: 2px solid var(--border-dark, #222222);
   border-radius: 14px;
   padding: 14px 16px;
   background-color: #ffffff;
@@ -868,7 +878,7 @@
 .sapa-cat-icon {
   width: 34px;
   height: 34px;
-  border: 1.8px solid var(--border-dark);
+  border: 1.8px solid var(--border-dark, #222222);
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -892,7 +902,7 @@
   font-size: 10.5px;
   font-weight: 800;
   background-color: #e8f5e9;
-  color: var(--hw-green);
+  color: var(--hw-green, #1b7837);
   padding: 1px 6px;
   border-radius: 4px;
   margin-top: 2px;
@@ -911,7 +921,7 @@
 
 .sapa-shop-list li::before {
   content: "・";
-  color: var(--hw-green);
+  color: var(--hw-green, #1b7837);
   font-weight: 900;
 }
 
@@ -933,7 +943,7 @@
 
 /* ----- 施設詳細画面：IC / JCT 専用ビュー (facility.html) ----- */
 .ic-detail-box {
-  border: 2px solid var(--border-dark);
+  border: 2px solid var(--border-dark, #222222);
   border-radius: 16px;
   padding: 24px 26px;
   background-color: #ffffff;
@@ -962,7 +972,7 @@
 .ic-detail-km-pill {
   margin-left: auto;
   background-color: #e8f5e9;
-  color: var(--hw-green-dark);
+  color: var(--hw-green-dark, #145a32);
   font-weight: 800;
   font-size: 14px;
   padding: 6px 14px;
@@ -996,7 +1006,7 @@
 }
 
 .adjacent-card {
-  border: 2px solid var(--border-dark);
+  border: 2px solid var(--border-dark, #222222);
   border-radius: 12px;
   padding: 12px 16px;
   background-color: #ffffff;
@@ -1006,7 +1016,7 @@
 
 .adjacent-card:hover {
   background-color: #f3faf5;
-  border-color: var(--hw-green);
+  border-color: var(--hw-green, #1b7837);
 }
 
 .adjacent-card.disabled {
@@ -1018,7 +1028,7 @@
 .adjacent-dir-label {
   font-size: 11.5px;
   font-weight: 800;
-  color: var(--text-sub);
+  color: var(--text-sub, #555555);
   margin-bottom: 4px;
 }
 
@@ -1055,7 +1065,7 @@
 .raw-wiki-container h2,
 .raw-wiki-container h3 {
   margin: 20px 0 10px;
-  color: var(--hw-green-dark);
+  color: var(--hw-green-dark, #145a32);
 }
 
 .notice-banner {
@@ -1089,7 +1099,7 @@
   align-items: center;
   gap: 5px;
   background-color: #e8f5e9;
-  color: var(--hw-green-dark);
+  color: var(--hw-green-dark, #145a32);
   border: 1.5px solid #81c784;
   border-radius: 7px;
   padding: 3px 9px;
@@ -1102,15 +1112,15 @@
 }
 
 .connect-hw-link:hover {
-  background-color: var(--hw-green);
+  background-color: var(--hw-green, #1b7837);
   color: #ffffff;
-  border-color: var(--hw-green-dark);
+  border-color: var(--hw-green-dark, #145a32);
   transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(27, 120, 55, 0.25);
 }
 
 .connect-hw-num {
-  background-color: var(--hw-green);
+  background-color: var(--hw-green, #1b7837);
   color: #ffffff;
   font-size: 10.5px;
   font-weight: 900;
@@ -1120,7 +1130,7 @@
 
 .connect-hw-link:hover .connect-hw-num {
   background-color: #ffffff;
-  color: var(--hw-green);
+  color: var(--hw-green, #1b7837);
 }
 
 .connected-road-card.clickable-hw-card {
@@ -1133,7 +1143,7 @@
 
 .connected-road-card.clickable-hw-card:hover {
   background-color: #e3f5e8;
-  border-color: var(--hw-green);
+  border-color: var(--hw-green, #1b7837);
   transform: translateX(3px);
 }
 
@@ -1146,7 +1156,7 @@
 .hw-jump-arrow {
   font-size: 12px;
   font-weight: 900;
-  color: var(--hw-green);
+  color: var(--hw-green, #1b7837);
   white-space: nowrap;
 }
 
@@ -1192,10 +1202,10 @@
 .general-parking-counts {
   font-size: 14px;
   font-weight: 800;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
-/* ----- 施設詳細：1ページ統合表示（施設 ＋ 概要） ----- */
+/* ----- 施設詳細：1ページ統合表示（概要 ＋ 施設） ----- */
 .facility-unified-section {
   scroll-margin-top: 20px;
 }
@@ -1208,7 +1218,7 @@
 }
 
 .facility-section-tag {
-  background-color: var(--hw-green);
+  background-color: var(--hw-green, #1b7837);
   color: #ffffff;
   font-size: 12px;
   font-weight: 900;
@@ -1220,7 +1230,7 @@
 .facility-section-banner h2 {
   font-size: 20px;
   font-weight: 900;
-  color: var(--text-main);
+  color: var(--text-main, #1a1a1a);
 }
 
 .facility-unified-divider {
@@ -1258,13 +1268,13 @@
 
 .co-facility-chip:hover {
   background-color: #e8f5e9;
-  border-color: var(--hw-green);
+  border-color: var(--hw-green, #1b7837);
 }
 
 .co-facility-chip.active {
-  background-color: var(--hw-green);
+  background-color: var(--hw-green, #1b7837);
   color: #ffffff;
-  border-color: var(--hw-green);
+  border-color: var(--hw-green, #1b7837);
   cursor: default;
 }
 
@@ -1275,7 +1285,7 @@
   width: 330px;
   max-width: calc(100vw - 24px);
   background-color: #ffffff;
-  border: 2px solid var(--hw-green);
+  border: 2px solid var(--hw-green, #1b7837);
   border-radius: 12px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
   padding: 12px 14px;
@@ -1302,7 +1312,7 @@
 .popover-title {
   font-size: 14.5px;
   font-weight: 900;
-  color: var(--hw-green-dark);
+  color: var(--hw-green-dark, #145a32);
   line-height: 1.3;
 }
 
@@ -1327,7 +1337,7 @@
   margin-top: 7px;
   font-size: 11px;
   font-weight: 800;
-  color: var(--hw-green);
+  color: var(--hw-green, #1b7837);
   text-align: right;
 }
 
@@ -1360,13 +1370,4 @@
     grid-template-columns: 1fr;
     gap: 10px;
   }
-}
-
-/* =========================================================
-   営業中PA/ICに併設された未開通・事業中SIC/BSの個別バッジ表示
-   ========================================================= */
-.f-badge.f-badge-inactive {
-  filter: grayscale(85%);
-  opacity: 0.62;
-  border-style: dashed;
 }
