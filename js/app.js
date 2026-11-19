@@ -122,7 +122,6 @@ async function navigateToHighwayRoute({ num, name, wikiTitle }) {
 
 /**
  * 施設詳細画面（前後ICナビ・併設施設表示）に必要な最小限のデータのみを安全に保存する
- * 容量上限（QuotaExceededError）時は古いキャッシュをクリアして再試行する
  */
 function saveIcListToSession(list) {
   const compactList = list.map(item => ({
@@ -171,7 +170,7 @@ function saveIcListToSession(list) {
         }));
         sessionStorage.setItem("hw_current_ic_list", JSON.stringify(minimalList));
       } catch (___) {
-        // ブラウザのストレージ制限が厳しい場合でも一覧表示自体は続行する
+        // ストレージ上限が厳しい場合でも画面表示を継続する
       }
     }
   }
@@ -229,12 +228,22 @@ async function initIndexPage() {
       .replace(/[\s ・（）()]/g, "");
   }
 
+  function getRouteName(r) {
+    return r.name || r.routeName || r.title || r.wikiTitle || "";
+  }
+
+  function getRouteNumber(r) {
+    return r.number || r.num || "HW";
+  }
+
   function navigateToRoute(routeObj) {
+    const rName = getRouteName(routeObj);
+    const rNum = getRouteNumber(routeObj);
     const params = new URLSearchParams({
-      id: routeObj.id,
-      num: routeObj.number,
-      name: routeObj.name,
-      wiki: routeObj.wikiTitle
+      id: routeObj.id || "custom",
+      num: rNum,
+      name: rName,
+      wiki: routeObj.wikiTitle || rName
     });
     location.href = `route.html?${params.toString()}`;
   }
@@ -256,27 +265,32 @@ async function initIndexPage() {
 
     const qNorm = normalizeSearchText(state.query);
     const filtered = routes.filter(r => {
-      if (state.region !== "all" && !r.region.includes(state.region)) {
+      if (state.region !== "all" && !(r.region || "").includes(state.region)) {
         return false;
       }
       if (state.operator !== "all") {
+        const op = r.operator || "";
         if (state.operator === "urban") {
-          if (!/首都高速|阪神高速|名古屋高速|本州四国/.test(r.operator)) return false;
-        } else if (!r.operator.includes(state.operator)) {
+          if (!/首都高速|阪神高速|名古屋高速|本州四国/.test(op)) return false;
+        } else if (!op.includes(state.operator)) {
           return false;
         }
       }
       if (qNorm) {
+        const rName = getRouteName(r);
+        const rNum = getRouteNumber(r);
         const target = normalizeSearchText(
-          `${r.number} ${r.name} ${r.kana || ""} ${r.romaji || ""} ${r.section} ${r.regionLabel} ${r.operator}`
+          `${rNum} ${rName} ${r.kana || ""} ${r.romaji || ""} ${r.section || ""} ${r.regionLabel || ""} ${r.operator || ""}`
         );
         if (!target.includes(qNorm)) return false;
       }
       return true;
     });
 
-    heading.textContent = regionNames[state.region] || "高速道路路線一覧";
-    countBadge.textContent = `${filtered.length} 路線`;
+    if (heading) heading.textContent = regionNames[state.region] || "高速道路路線一覧";
+    if (countBadge) countBadge.textContent = `${filtered.length} 路線`;
+
+    if (!grid) return;
 
     if (filtered.length === 0) {
       grid.innerHTML = `<p style="color:#666; padding: 20px;">条件に一致する路線が見つかりませんでした。</p>`;
@@ -285,17 +299,19 @@ async function initIndexPage() {
 
     grid.innerHTML = filtered.map(r => {
       const isUrban = r.color === "#0068b7";
+      const rName = getRouteName(r);
+      const rNum = getRouteNumber(r);
       return `
         <article class="route-card" data-id="${WikiRenderer.escapeHtml(r.id)}" tabindex="0">
           <div class="route-card-top">
-            <span class="route-num-badge ${isUrban ? "urban" : ""}">${WikiRenderer.escapeHtml(r.number)}</span>
-            <h3 class="route-card-name">${WikiRenderer.escapeHtml(r.name)}</h3>
+            <span class="route-num-badge ${isUrban ? "urban" : ""}">${WikiRenderer.escapeHtml(rNum)}</span>
+            <h3 class="route-card-name">${WikiRenderer.escapeHtml(rName)}</h3>
           </div>
           <div class="route-card-meta">
-            <div>区間：${WikiRenderer.escapeHtml(r.section)}</div>
+            <div>区間：${WikiRenderer.escapeHtml(r.section || "")}</div>
             <div class="route-card-tags">
-              <span class="operator-tag">${WikiRenderer.escapeHtml(r.operator)}</span>
-              <span class="length-tag">総延長 ${WikiRenderer.escapeHtml(r.length)}</span>
+              <span class="operator-tag">${WikiRenderer.escapeHtml(r.operator || "")}</span>
+              <span class="length-tag">総延長 ${WikiRenderer.escapeHtml(r.length || "")}</span>
             </div>
           </div>
         </article>
@@ -306,6 +322,8 @@ async function initIndexPage() {
       const rt = routes.find(x => x.id === card.dataset.id);
       if (!rt) return;
 
+      const rName = getRouteName(rt);
+      const rNum = getRouteNumber(rt);
       const go = () => navigateToRoute(rt);
       card.addEventListener("click", go);
       card.addEventListener("keydown", e => {
@@ -318,9 +336,9 @@ async function initIndexPage() {
       card.addEventListener("mouseenter", e => {
         WikiHoverPreview.show({
           key: `route_${rt.id}`,
-          title: `${rt.number} ${rt.name}`,
-          metaLines: [`区間：${rt.section}（総延長 ${rt.length}）`, `管轄：${rt.operator}`],
-          wikiTitle: rt.wikiTitle,
+          title: `${rNum} ${rName}`,
+          metaLines: [`区間：${rt.section || ""}（総延長 ${rt.length || ""}）`, `管轄：${rt.operator || ""}`],
+          wikiTitle: rt.wikiTitle || rName,
           hintText: "クリックでIC一覧・路線状況へ",
           event: e
         });
@@ -330,31 +348,39 @@ async function initIndexPage() {
     });
   }
 
-  searchInput.addEventListener("input", e => {
-    state.query = e.target.value;
-    render();
-  });
-
-  filterContainer.querySelectorAll(".filter-pill").forEach(btn => {
-    btn.addEventListener("click", () => {
-      filterContainer.querySelectorAll(".filter-pill").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      state.operator = btn.dataset.operator;
+  if (searchInput) {
+    searchInput.addEventListener("input", e => {
+      state.query = e.target.value;
       render();
     });
-  });
+  }
 
-  resetRegionBtn.addEventListener("click", () => {
-    state.region = "all";
-    render();
-  });
+  if (filterContainer) {
+    filterContainer.querySelectorAll(".filter-pill").forEach(btn => {
+      btn.addEventListener("click", () => {
+        filterContainer.querySelectorAll(".filter-pill").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        state.operator = btn.dataset.operator;
+        render();
+      });
+    });
+  }
 
-  directForm.addEventListener("submit", e => {
-    e.preventDefault();
-    const title = directInput.value.trim();
-    if (!title) return;
-    navigateToHighwayRoute({ num: "HW", name: title, wikiTitle: title });
-  });
+  if (resetRegionBtn) {
+    resetRegionBtn.addEventListener("click", () => {
+      state.region = "all";
+      render();
+    });
+  }
+
+  if (directForm && directInput) {
+    directForm.addEventListener("submit", e => {
+      e.preventDefault();
+      const title = directInput.value.trim();
+      if (!title) return;
+      navigateToHighwayRoute({ num: "HW", name: title, wikiTitle: title });
+    });
+  }
 
   render();
 }
@@ -364,26 +390,37 @@ async function initIndexPage() {
    --------------------------------------------------------- */
 async function initRoutePage() {
   const params = new URLSearchParams(location.search);
-  const routeNum = params.get("num") || "E1";
-  const routeName = params.get("name") || "東名高速道路";
-  const wikiTitle = params.get("wiki") || routeName;
+  const routeId = params.get("id") || "";
+  const routesMaster = await WikiAPI.fetchRoutesMaster();
+  const matchedMaster = routesMaster.find(r =>
+    (routeId && r.id === routeId) ||
+    (params.get("wiki") && r.wikiTitle === params.get("wiki")) ||
+    (params.get("name") && r.name === params.get("name"))
+  );
+
+  const routeNum = params.get("num") || (matchedMaster ? matchedMaster.number : "E1");
+  const routeName = params.get("name") || (matchedMaster ? matchedMaster.name : (params.get("wiki") || "東名高速道路"));
+  const wikiTitle = params.get("wiki") || (matchedMaster ? matchedMaster.wikiTitle : routeName);
   let activeTab = params.get("tab") || "interchanges";
   let activeBranchFilter = "all";
 
   document.title = `${routeNum} ${routeName} - 高速道路Wikipediaガイド`;
-  const numBadge = document.getElementById("routeNumBadge");
-  const titleNameEl = document.getElementById("routeTitleName");
+  const numBadge = document.getElementById("routeNumBadge") || document.querySelector(".route-sign-top .route-num-badge");
+  const titleNameEl = document.getElementById("routeTitleName") || document.querySelector(".route-sign-name");
   const sourceLink = document.getElementById("wikiSourceLink");
   const mainContent = document.getElementById("routeMainContent");
   const navItems = document.querySelectorAll(".sidebar-nav .nav-item");
 
-  numBadge.textContent = routeNum;
-  if (/^C\d/.test(routeNum) && routeName.includes("首都高速")) {
-    numBadge.classList.add("urban");
+  if (numBadge) {
+    numBadge.textContent = routeNum;
+    if (/^C\d/.test(routeNum) && routeName.includes("首都高速")) {
+      numBadge.classList.add("urban");
+    }
   }
-  titleNameEl.textContent = routeName;
+  if (titleNameEl) {
+    titleNameEl.textContent = routeName;
+  }
 
-  const routesMaster = await WikiAPI.fetchRoutesMaster();
   let parsedData = null;
 
   function updateTabUI() {
@@ -415,6 +452,21 @@ async function initRoutePage() {
     location.href = `facility.html?${fParams.toString()}`;
   }
 
+  function resolveHighwayDisplayName(lk) {
+    const matched = routesMaster.find(r =>
+      r.wikiTitle === lk.wikiTitle ||
+      r.name === lk.name ||
+      r.name === lk.wikiTitle
+    );
+    const dispNum = lk.num || (matched ? matched.number : "");
+    let dispName = lk.name || "";
+    if (!dispName || /^(E\d+[A-Z]?|C\d+[A-Z]?|CA|HW)$/i.test(dispName.trim())) {
+      dispName = (matched ? matched.name : "") || lk.wikiTitle || dispName;
+    }
+    const dispWiki = (matched ? matched.wikiTitle : "") || lk.wikiTitle || dispName;
+    return { dispNum, dispName, dispWiki };
+  }
+
   function renderConnectCell(item) {
     const links = Array.isArray(item.connectLinks) ? item.connectLinks : [];
     const lines = Array.isArray(item.connectLines) && item.connectLines.length > 0
@@ -428,23 +480,21 @@ async function initRoutePage() {
       return WikiRenderer.escapeHtml(item.connect || "");
     }
 
-    const hwChipsHtml = links.map(lk => {
-      const matched = routesMaster.find(r => r.wikiTitle === lk.wikiTitle || r.name === lk.name);
-      const dispNum = lk.num || (matched ? matched.number : "");
-      return `
-        <button type="button"
-                class="connect-hw-link"
-                data-hw-num="${WikiRenderer.escapeHtml(dispNum || "HW")}"
-                data-hw-name="${WikiRenderer.escapeHtml(lk.name)}"
-                data-hw-wiki="${WikiRenderer.escapeHtml(lk.wikiTitle)}"
-                title="${WikiRenderer.escapeHtml(lk.name)} の路線ページへ移動">
-          ${dispNum ? `<span class="connect-hw-num">${WikiRenderer.escapeHtml(dispNum)}</span>` : ""}
-          <span>${WikiRenderer.escapeHtml(lk.name)} ↗</span>
-        </button>
-      `;
-    }).join("");
+    const resolvedLinks = links.map(lk => resolveHighwayDisplayName(lk));
 
-    const nonHwLines = lines.filter(ln => !links.some(lk => ln.includes(lk.name)));
+    const hwChipsHtml = resolvedLinks.map(rl => `
+      <button type="button"
+              class="connect-hw-link"
+              data-hw-num="${WikiRenderer.escapeHtml(rl.dispNum || "HW")}"
+              data-hw-name="${WikiRenderer.escapeHtml(rl.dispName)}"
+              data-hw-wiki="${WikiRenderer.escapeHtml(rl.dispWiki)}"
+              title="${WikiRenderer.escapeHtml(rl.dispName)} の路線ページへ移動">
+        ${rl.dispNum ? `<span class="connect-hw-num">${WikiRenderer.escapeHtml(rl.dispNum)}</span>` : ""}
+        <span>${WikiRenderer.escapeHtml(rl.dispName)} ↗</span>
+      </button>
+    `).join("");
+
+    const nonHwLines = lines.filter(ln => !resolvedLinks.some(rl => rl.dispName && ln.includes(rl.dispName)));
     const nonHwHtml = nonHwLines.length > 0
       ? `<div style="margin-top: 2px;">${nonHwLines.map(l => WikiRenderer.escapeHtml(l)).join(" / ")}</div>`
       : "";
@@ -559,20 +609,17 @@ async function initRoutePage() {
           </div>
           <div class="route-continuation-list">
             ${continuations.map(c => {
-              const matched = routesMaster.find(r => r.wikiTitle === c.wikiTitle || r.name === c.name);
-              const dispNum = c.num || (matched ? matched.number : "HW");
-              const dispName = matched ? matched.name : c.name;
-              const dispWiki = matched ? matched.wikiTitle : c.wikiTitle;
+              const rl = resolveHighwayDisplayName(c);
               return `
                 <div class="route-continuation-card"
                      role="button"
                      tabindex="0"
-                     data-hw-num="${WikiRenderer.escapeHtml(dispNum)}"
-                     data-hw-name="${WikiRenderer.escapeHtml(dispName)}"
-                     data-hw-wiki="${WikiRenderer.escapeHtml(dispWiki)}">
+                     data-hw-num="${WikiRenderer.escapeHtml(rl.dispNum || "HW")}"
+                     data-hw-name="${WikiRenderer.escapeHtml(rl.dispName)}"
+                     data-hw-wiki="${WikiRenderer.escapeHtml(rl.dispWiki)}">
                   <div class="route-continuation-left">
-                    <span class="route-num-badge">${WikiRenderer.escapeHtml(dispNum)}</span>
-                    <span class="route-continuation-name">${WikiRenderer.escapeHtml(dispName)}</span>
+                    <span class="route-num-badge">${WikiRenderer.escapeHtml(rl.dispNum || "HW")}</span>
+                    <span class="route-continuation-name">${WikiRenderer.escapeHtml(rl.dispName)}</span>
                     <span class="route-continuation-note">（${WikiRenderer.escapeHtml(c.note)}）</span>
                   </div>
                   <span class="hw-jump-arrow">この道路へ進む ↗</span>
@@ -775,7 +822,7 @@ async function initRoutePage() {
 
   try {
     const pageData = await WikiAPI.fetchPageHtml(wikiTitle);
-    sourceLink.href = pageData.wikiUrl;
+    if (sourceLink) sourceLink.href = pageData.wikiUrl;
     parsedData = WikiParser.parseRoutePage(pageData.html);
     renderCurrentTab();
   } catch (err) {
