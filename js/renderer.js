@@ -1,19 +1,40 @@
 /* =========================================================
-   renderer.js : オリジナル描画（簡易マップ・車線・標識・SA/PA・IC/JCT）
+   renderer.js : 高速道路標識風UIコンポーネント・SVG地図描画
    ========================================================= */
 
 const WikiRenderer = (() => {
+  const BADGE_CLASS_MAP = {
+    IC: "badge-ic",
+    JCT: "badge-jct",
+    SA: "badge-sa",
+    PA: "badge-pa",
+    SIC: "badge-sic",
+    BS: "badge-bs",
+    TB: "badge-tb",
+    TN: "badge-tn"
+  };
+
+  const BADGE_LABEL_MAP = {
+    IC: "IC",
+    JCT: "JCT",
+    SA: "SA",
+    PA: "PA",
+    SIC: "SIC",
+    BS: "BS",
+    TB: "TB",
+    TN: "TN"
+  };
+
   function escapeHtml(str) {
-    return String(str || "")
+    return String(str == null ? "" : str)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   /**
-   * 施設種別バッジ（IC / JCT / PA / SA / SIC / BS 等）のHTML生成
- /**
    * 施設種別アイコンバッジ群を生成（複数併設時は個別クリック可能）
    */
   function renderFacilityBadges(types, badgeItems = null, interactive = false) {
@@ -44,460 +65,362 @@ const WikiRenderer = (() => {
     return `<span class="facility-badges">${badgesHtml}</span>`;
   }
 
-    const list = Array.isArray(types) && types.length > 0 ? types : ["IC"];
-    const badgesHtml = list.map(t => {
-      const lower = t.toLowerCase();
-      const cls = validClasses.includes(lower) ? lower : "other";
-      return `<span class="f-badge ${cls}">${escapeHtml(t)}</span>`;
+  /**
+   * トップ画面の日本地図＆幹線高速道路ネットワークSVGを描画
+   */
+  function renderJapanMap(container, routes, selectedRegion, onSelectRegion, onSelectRoute) {
+    if (!container) return;
+    const safeRoutes = Array.isArray(routes) ? routes : [];
+
+    const regions = [
+      { id: "hokkaido", name: "北海道", points: "338,108 345,78 362,55 375,20 402,28 432,58 424,84 395,92 372,88 352,110", lx: 382, ly: 62 },
+      { id: "tohoku",   name: "東北",   points: "326,118 352,118 358,162 348,215 342,240 314,240 318,185", lx: 335, ly: 175 },
+      { id: "kanto",    name: "関東",   points: "300,240 342,240 348,282 326,306 298,302 296,268", lx: 320, ly: 272 },
+      { id: "chubu",    name: "中部",   points: "224,265 268,220 300,240 298,302 268,318 228,314 222,290", lx: 258, ly: 274 },
+      { id: "kinki",    name: "近畿",   points: "178,282 224,265 228,314 214,344 184,342 176,315", lx: 202, ly: 310 },
+      { id: "chugoku",  name: "中国",   points: "96,298 178,282 176,315 100,326", lx: 138, ly: 306 },
+      { id: "shikoku",  name: "四国",   points: "120,334 176,328 174,362 118,364", lx: 147, ly: 348 },
+      { id: "kyushu",   name: "九州",   points: "46,326 96,326 94,385 72,424 44,412 40,362", lx: 68, ly: 372 }
+    ];
+
+    const regionPolysHtml = regions.map(reg => {
+      const isActive = selectedRegion === reg.id;
+      return `
+        <g class="map-region-group" data-region="${reg.id}">
+          <polygon class="region-shape ${isActive ? "active" : ""}" points="${reg.points}"></polygon>
+          <text x="${reg.lx}" y="${reg.ly}" text-anchor="middle" font-size="11" font-weight="800" fill="#23472e" pointer-events="none">${reg.name}</text>
+        </g>
+      `;
     }).join("");
-    return `<span class="facility-badges">${badgesHtml}</span>`;
+
+    const routeLinesHtml = safeRoutes
+      .filter(r => Array.isArray(r.mapCoords) && r.mapCoords.length >= 2)
+      .map(r => {
+        const pts = r.mapCoords.map(c => `${c[0]},${c[1]}`).join(" ");
+        const strokeColor = r.color || "#1b7837";
+        const rName = r.name || r.wikiTitle || r.id;
+        return `
+          <polyline class="map-route-line"
+                    data-route-id="${escapeHtml(r.id)}"
+                    points="${pts}"
+                    stroke="${escapeHtml(strokeColor)}">
+            <title>${escapeHtml((r.number || "") + " " + rName)}</title>
+          </polyline>
+        `;
+      }).join("");
+
+    container.innerHTML = `
+      <svg class="japan-map-svg" viewBox="0 0 450 445" role="img" aria-label="日本全国の高速道路ネットワークマップ">
+        ${regionPolysHtml}
+        ${routeLinesHtml}
+      </svg>
+    `;
+
+    container.querySelectorAll(".map-region-group").forEach(grp => {
+      grp.addEventListener("click", () => {
+        if (typeof onSelectRegion === "function") {
+          onSelectRegion(grp.dataset.region);
+        }
+      });
+    });
+
+    container.querySelectorAll(".map-route-line").forEach(line => {
+      line.addEventListener("click", e => {
+        e.stopPropagation();
+        if (typeof onSelectRoute === "function") {
+          onSelectRoute(line.dataset.routeId);
+        }
+      });
+    });
   }
 
   /**
-   * 路線状況：車線数グラフィック描画
+   * 概要タブ（リード文 ＋ Infobox基礎データ）を描画
    */
-  function renderLanesVisual(upLanes, downLanes) {
-    const makeBlock = (count) => {
-      const safeCount = Math.max(1, Math.min(6, Number(count) || 2));
-      const strips = Array.from({ length: safeCount }, () => `<span class="lane-strip"></span>`).join("");
-      return `
-        <div class="lane-direction-block">
-          <div class="lane-road-box">${strips}</div>
-          <span class="lane-count-num">${safeCount}</span>
+  function renderOverviewTab(overview, titleName) {
+    const paragraphs = (overview && Array.isArray(overview.paragraphs)) ? overview.paragraphs : [];
+    const infobox = (overview && Array.isArray(overview.infobox)) ? overview.infobox : [];
+
+    const paraHtml = paragraphs.length > 0
+      ? paragraphs.map(p => `<p>${escapeHtml(p)}</p>`).join("")
+      : `<p>${escapeHtml(titleName)} のWikipedia記事データです。</p>`;
+
+    const infoHtml = infobox.length > 0
+      ? `
+        <div class="infobox-grid">
+          ${infobox.map(row => `
+            <div class="infobox-item">
+              <div class="infobox-key">${escapeHtml(row.key)}</div>
+              <div class="infobox-val">${escapeHtml(row.val)}</div>
+            </div>
+          `).join("")}
         </div>
-      `;
-    };
+      `
+      : "";
+
     return `
-      <div class="lanes-visual-group">
-        ${makeBlock(upLanes)}
-        ${makeBlock(downLanes)}
+      <div class="overview-card">
+        <h2>${escapeHtml(titleName)} の概要</h2>
+        ${paraHtml}
+        ${infoHtml}
       </div>
     `;
   }
 
   /**
-   * 路線状況：最高速度標識描画
+   * 車線数ビジュアル（上り・下りの縦棒＋テキスト）を描画
    */
-  function renderSpeedSigns(speeds) {
-    if (!speeds || speeds.length === 0) return "";
-    const items = speeds.map(s => `
-      <div class="speed-sign-item">
-        <span class="speed-sign-label">${escapeHtml(s.label)}</span>
-        <span class="speed-sign-circle">${escapeHtml(s.speed)}</span>
+  function renderLanesVisual(upLanes, downLanes) {
+    const up = Math.max(1, Math.min(5, Number(upLanes) || 2));
+    const down = Math.max(1, Math.min(5, Number(downLanes) || 2));
+
+    const upBars = Array.from({ length: up }, () => `<span class="lane-bar"></span>`).join("");
+    const downBars = Array.from({ length: down }, () => `<span class="lane-bar"></span>`).join("");
+
+    return `
+      <div class="lanes-visual-box">
+        <div class="lanes-bars" aria-hidden="true">
+          ${upBars}
+          <span class="lane-bar median"></span>
+          ${downBars}
+        </div>
+        <div class="lanes-text">
+          <div>上り ${up}車線</div>
+          <div>下り ${down}車線</div>
+        </div>
       </div>
-    `).join("");
-    return `<div class="speed-signs-group">${items}</div>`;
+    `;
   }
 
   /**
-   * SA / PA 画面：方面別の駐車台数（本線＋一般道ぷらっとパーク分離）・ピクトグラム・店舗リスト描画
+   * 最高速度標識アイコン群を描画
+   */
+  function renderSpeedSigns(speeds) {
+    if (!Array.isArray(speeds) || speeds.length === 0) {
+      return `<span style="color:#777; font-size:13px;">（同上）</span>`;
+    }
+    return `
+      <div class="speed-signs-group">
+        ${speeds.map(s => `
+          <div class="speed-sign-item">
+            <span class="speed-sign-label">${escapeHtml(s.label)}</span>
+            <div class="speed-sign-circle">${escapeHtml(s.speed)}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  /**
+   * SA/PA の方向別施設ボックスを描画
    */
   function renderSapaDirection(dir) {
-    const truckSvg = `<svg viewBox="0 0 24 24"><rect x="1" y="6" width="14" height="10" rx="1.5"></rect><path d="M15 9h4l3 3v4h-7V9z"></path><circle cx="6" cy="18" r="2"></circle><circle cx="18" cy="18" r="2"></circle></svg>`;
-    const carSvg = `<svg viewBox="0 0 24 24"><path d="M5 11l2-5h10l2 5"></path><rect x="3" y="11" width="18" height="6" rx="2"></rect><circle cx="7" cy="18" r="2"></circle><circle cx="17" cy="18" r="2"></circle></svg>`;
+    const parkingParts = [];
+    if (dir.largeParking) parkingParts.push(`大型 ${dir.largeParking}`);
+    if (dir.smallParking) parkingParts.push(`小型 ${dir.smallParking}`);
+    if (dir.handicappedParking) parkingParts.push(`身障者用 ${dir.handicappedParking}`);
+    if (parkingParts.length === 0 && dir.totalParking) parkingParts.push(`計 ${dir.totalParking}`);
 
-    const hasMainParking = dir.largeParking || dir.smallParking || dir.totalParking || dir.handicappedParking;
-    const hasGenParking = Array.isArray(dir.generalParking) && dir.generalParking.length > 0;
-
-    let parkingHtml = "";
-    if (hasMainParking || hasGenParking) {
-      const mainRowHtml = hasMainParking ? `
-        <div class="parking-sub-group">
-          ${hasGenParking ? `<span class="parking-group-badge main-hw">本線駐車枠</span>` : ""}
-          ${dir.largeParking ? `
-            <div class="parking-card" title="大型車駐車台数">
-              ${truckSvg}
-              <span>${escapeHtml(dir.largeParking)}</span>
-            </div>
-          ` : ""}
-          ${dir.smallParking ? `
-            <div class="parking-card" title="小型車駐車台数">
-              ${carSvg}
-              <span>${escapeHtml(dir.smallParking)}</span>
-            </div>
-          ` : ""}
-          ${(!dir.largeParking && !dir.smallParking && dir.totalParking) ? `
-            <div class="parking-card" title="駐車台数">
-              ${carSvg}
-              <span>計 ${escapeHtml(dir.totalParking)}</span>
-            </div>
-          ` : ""}
-          ${dir.handicappedParking ? `
-            <div class="parking-card" title="身障者用駐車台数">
-              <span style="font-size:13px; color:#555;">身障者用</span>
-              <span>${escapeHtml(dir.handicappedParking)}</span>
-            </div>
-          ` : ""}
-        </div>
-      ` : "";
-
-      const genRowsHtml = hasGenParking ? dir.generalParking.map(gp => `
-        <div class="parking-sub-group">
-          <span class="parking-group-badge general-road">${escapeHtml(gp.label || "一般道（ぷらっとパーク）")}</span>
-          ${gp.large ? `
-            <div class="parking-card general-road-card" title="${escapeHtml(gp.label)} 大型車">
-              ${truckSvg}
-              <span>${escapeHtml(gp.large)}</span>
-            </div>
-          ` : ""}
-          ${gp.small ? `
-            <div class="parking-card general-road-card" title="${escapeHtml(gp.label)} 小型車">
-              ${carSvg}
-              <span>${escapeHtml(gp.small)}</span>
-            </div>
-          ` : ""}
-          ${(!gp.large && !gp.small && gp.total) ? `
-            <div class="parking-card general-road-card" title="${escapeHtml(gp.label)} 駐車台数">
-              ${carSvg}
-              <span>${escapeHtml(gp.total)}</span>
-            </div>
-          ` : ""}
-        </div>
-      `).join("") : "";
-
-      parkingHtml = `
-        <div class="parking-section-group">
-          ${mainRowHtml}
-          ${genRowsHtml}
-        </div>
-      `;
-    }
+    const parkingHtml = parkingParts.length > 0 ? `
+      <div class="parking-block">
+        <div class="parking-p-icon">P</div>
+        <div class="parking-counts">${parkingParts.map(p => escapeHtml(p)).join(" / ")}</div>
+      </div>
+    ` : "";
 
     const amenities = [];
-    if (dir.hasToilet) {
-      amenities.push(`
-        <div class="amenity-icon-box" title="トイレ">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="8" cy="5" r="2"></circle><path d="M6 9h4v6H9v5H7v-5H6V9z"></path>
-            <circle cx="16" cy="5" r="2"></circle><path d="M14 9h4l1 6h-2v5h-2v-5h-2l1-6z"></path>
-          </svg>
-        </div>
-      `);
-    }
-    if (dir.hasEv) {
-      amenities.push(`
-        <div class="amenity-icon-box ev" title="EV急速充電器">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M5 11l2-4h10l2 4"></path><rect x="3" y="11" width="18" height="6" rx="2"></rect>
-            <path d="M13 13l-2 2h3l-2 2" stroke-width="1.8"></path>
-          </svg>
-        </div>
-      `);
-    }
-    if (dir.hasGs) {
-      amenities.push(`
-        <div class="amenity-icon-box gs" title="ガソリンスタンド">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="4" y="4" width="10" height="16" rx="1.5"></rect>
-            <rect x="6" y="6" width="6" height="4"></rect>
-            <path d="M14 8h2a2 2 0 0 1 2 2v7a1.5 1.5 0 0 0 3 0v-6l-2-2"></path>
-          </svg>
-        </div>
-      `);
-    }
-    if (dir.hasInfo) {
-      amenities.push(`
-        <div class="amenity-icon-box info" title="インフォメーション">
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="7" r="1.6"></circle><rect x="10.7" y="10.5" width="2.6" height="7.5" rx="1"></rect>
-          </svg>
-        </div>
-      `);
-    }
-    if (dir.hasVending) {
-      amenities.push(`
-        <div class="amenity-icon-box vending" title="自動販売機">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="5" y="3" width="14" height="18" rx="2"></rect>
-            <rect x="8" y="6" width="8" height="6"></rect>
-            <line x1="8" y1="16" x2="16" y2="16"></line>
-          </svg>
-        </div>
-      `);
-    }
+    if (dir.hasToilet) amenities.push({ label: "トイレ", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="5" r="2"/><path d="M6 21v-7H5v-4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v4h-1v7"/><circle cx="17" cy="5" r="2"/><path d="M15 21v-5h-1l2-7h2l2 7h-1v5"/></svg>` });
+    if (dir.hasGs) amenities.push({ label: "給油所", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="10" height="16" rx="2"/><path d="M14 8h3l2 3v7a1 1 0 0 1-2 0v-5h-3"/></svg>` });
+    if (dir.hasEv) amenities.push({ label: "EV充電", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>` });
+    if (dir.hasInfo) amenities.push({ label: "案内所", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>` });
+    if (dir.hasVending) amenities.push({ label: "自販機", icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/></svg>` });
 
-    const amenityHtml = amenities.length > 0 ? `<div class="amenity-row">${amenities.join("")}</div>` : "";
-
-    const shopIconSvg = (catType) => {
-      switch (catType) {
-        case "takeout":
-          return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8h12l-1 12H7L6 8z"></path><path d="M9 8V6a3 3 0 0 1 6 0v2"></path></svg>`;
-        case "foodcourt":
-          return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4v16M5 4v5a2 2 0 0 0 4 0V4M16 4v16M16 4c2 0 3 2 3 5h-3"></path></svg>`;
-        case "shopping":
-          return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 7h14l-1 13H6L5 7z"></path><path d="M9 7V5a3 3 0 0 1 6 0v2"></path></svg>`;
-        case "cafe":
-          return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h12v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8z"></path><path d="M16 9h2a2 2 0 0 1 0 4h-2"></path></svg>`;
-        default:
-          return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="14" rx="2"></rect><line x1="4" y1="10" x2="20" y2="10"></line></svg>`;
-      }
-    };
-
-    const categoriesHtml = dir.categories.map(cat => {
-      const badgeCls = ["takeout", "foodcourt", "shopping", "cafe", "restaurant", "convenience"].includes(cat.catType)
-        ? cat.catType
-        : "default";
-      const titleHtml = escapeHtml(cat.title).replace(/(\(24時間\)|（24時間）)/g, `<span class="badge-24h">$1</span>`);
-      const subHtml = cat.items && cat.items.length > 0
-        ? `<ul class="shop-sub-list">${cat.items.map(it => {
-            const subHighlighted = escapeHtml(it).replace(/(\(24時間\)|（24時間）)/g, `<span class="badge-24h">$1</span>`);
-            return `<li>${subHighlighted}</li>`;
-          }).join("")}</ul>`
-        : "";
-
-      return `
-        <div class="shop-category-item">
-          <div class="shop-category-header">
-            <span class="shop-cat-badge ${badgeCls}">${shopIconSvg(badgeCls)}</span>
-            <span>${titleHtml}</span>
+    const amenityHtml = amenities.length > 0 ? `
+      <div class="amenity-icons-row">
+        ${amenities.map(a => `
+          <div class="amenity-icon-card">
+            ${a.icon}
+            <span>${a.label}</span>
           </div>
-          ${subHtml}
-        </div>
-      `;
-    }).join("");
+        `).join("")}
+      </div>
+    ` : "";
 
-    const othersHtml = dir.others && dir.others.length > 0 ? `
-      <div class="other-facilities-box">
-        <div class="other-facilities-title">その他</div>
-        <ul class="shop-sub-list">
-          ${dir.others.map(o => `<li>${escapeHtml(o)}</li>`).join("")}
-        </ul>
+    const gpList = Array.isArray(dir.generalParking) ? dir.generalParking : [];
+    const generalParkingHtml = gpList.length > 0 ? `
+      <div class="general-parking-row">
+        ${gpList.map(gp => {
+          const parts = [];
+          if (gp.large) parts.push(`大型 ${gp.large}`);
+          if (gp.small) parts.push(`小型 ${gp.small}`);
+          if (gp.handicapped) parts.push(`身障者用 ${gp.handicapped}`);
+          if (parts.length === 0 && gp.total) parts.push(`計 ${gp.total}`);
+          return `
+            <div class="general-parking-item">
+              <div class="general-parking-p-icon">P</div>
+              <div>
+                <div class="general-parking-label">${escapeHtml(gp.label)}</div>
+                <div class="general-parking-counts">${escapeHtml(parts.join(" / "))}</div>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    ` : "";
+
+    const categoriesHtml = (dir.categories && dir.categories.length > 0) ? `
+      <div class="sapa-sub-heading">店舗・フード・ショッピング</div>
+      <div class="sapa-categories-grid">
+        ${dir.categories.map(cat => `
+          <div class="sapa-category-card">
+            <div class="sapa-cat-header">
+              <div class="sapa-cat-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-6 9 6v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+              </div>
+              <div>
+                <div class="sapa-cat-title">${escapeHtml(cat.title)}</div>
+                ${cat.is24h ? `<span class="sapa-cat-badge-24h">24時間営業</span>` : ""}
+              </div>
+            </div>
+            ${cat.items && cat.items.length > 0 ? `
+              <ul class="sapa-shop-list">
+                ${cat.items.map(it => `<li>${escapeHtml(it)}</li>`).join("")}
+              </ul>
+            ` : ""}
+          </div>
+        `).join("")}
+      </div>
+    ` : "";
+
+    const othersHtml = (dir.others && dir.others.length > 0) ? `
+      <div class="sapa-sub-heading">その他設備</div>
+      <div class="sapa-others-list">
+        ${dir.others.map(o => `<span class="sapa-other-chip">${escapeHtml(o)}</span>`).join("")}
       </div>
     ` : "";
 
     return `
-      <section class="direction-block">
-        <h3 class="direction-title">${escapeHtml(dir.title)}</h3>
-        ${parkingHtml}
-        ${amenityHtml}
-        <div class="shop-category-list">${categoriesHtml}</div>
+      <section class="sapa-section-box">
+        <h3 class="sapa-direction-title">${escapeHtml(dir.title)}</h3>
+        ${(parkingHtml || amenityHtml) ? `<div class="sapa-top-metrics">${parkingHtml}${amenityHtml}</div>` : ""}
+        ${generalParkingHtml}
+        ${categoriesHtml}
         ${othersHtml}
       </section>
     `;
   }
 
   /**
-   * IC / JCT / BS 詳細画面の描画（JCT接続高速道路リンク・併設施設切替対応）
+   * IC / JCT / SIC / BS 等の詳細ボックスを描画
    */
-  function renderIcJctDetail(icDetail, meta, adjacent, fallbackConnectLinks = []) {
-    const heroHtml = `
-      <div class="ic-detail-hero">
-        <div class="ic-hero-left">
-          ${meta.num && meta.num !== "-" ? `<span class="ic-hero-num">${escapeHtml(meta.num)}</span>` : ""}
-          ${renderFacilityBadges(meta.types)}
-          <h2 class="ic-hero-name">${escapeHtml(meta.shortName || meta.name)}</h2>
-        </div>
-        ${meta.km ? `<div class="ic-hero-km">起点から ${escapeHtml(meta.km)}</div>` : ""}
-      </div>
-    `;
+  function renderIcJctDetail(icDetail, info, adjacent, fallbackHwLinks = []) {
+    const roads = (icDetail && Array.isArray(icDetail.connectedRoads)) ? icDetail.connectedRoads : [];
+    const historyItems = (icDetail && Array.isArray(icDetail.historyItems)) ? icDetail.historyItems : [];
 
-    const adjHtml = (adjacent && (adjacent.prev || adjacent.next)) ? `
-      <div class="adjacent-nav-bar">
-        <button type="button" class="adj-btn" id="prevFacilityBtn" ${adjacent.prev ? "" : "disabled"}>
-          <span>← 前の施設</span>
-          <span>${adjacent.prev ? escapeHtml(adjacent.prev.shortName) : "起点"}</span>
-        </button>
-        <button type="button" class="adj-btn" id="nextFacilityBtn" ${adjacent.next ? "" : "disabled"}>
-          <span>${adjacent.next ? escapeHtml(adjacent.next.shortName) : "終点"}</span>
-          <span>次の施設 →</span>
-        </button>
-      </div>
-    ` : "";
-
-    const renderRoadSign = (road) => {
-      if (road.kind === "national") {
-        return `
-          <span class="road-sign-onigiri" title="一般国道">
-            <svg viewBox="0 0 36 34"><path d="M18 2 C25 2 34 14 33 23 C32 30 25 32 18 32 C11 32 4 30 3 23 C2 14 11 2 18 2 Z" fill="#005bac" stroke="#ffffff" stroke-width="1.5"/></svg>
-            <span>${escapeHtml(road.num)}</span>
-          </span>
-        `;
-      }
-      if (road.kind === "pref") {
-        return `
-          <span class="road-sign-hexa" title="都道府県道">
-            <svg viewBox="0 0 36 34"><polygon points="18,2 33,10 33,24 18,32 3,24 3,10" fill="#005bac" stroke="#ffffff" stroke-width="1.5"/></svg>
-            <span>${escapeHtml(road.num)}</span>
-          </span>
-        `;
-      }
-      if (road.kind === "highway") {
-        return `<span class="route-num-badge">${escapeHtml(road.num || "HW")}</span>`;
-      }
-      return `<span class="f-badge other">接続</span>`;
-    };
-
-    // 記事内「接続する道路」リスト（高速道路の場合はクリック遷移カードにする）
-    let roadsList = Array.isArray(icDetail.connectedRoads) ? [...icDetail.connectedRoads] : [];
-
-    // 記事内に「接続する道路」が無い、または高速道路が含まれていない場合、路線表の接続高速道路を補完
-    if (Array.isArray(fallbackConnectLinks) && fallbackConnectLinks.length > 0) {
-      for (const fb of fallbackConnectLinks) {
-        const alreadyExists = roadsList.some(r => r.kind === "highway" && (r.wikiTitle === fb.wikiTitle || r.name.includes(fb.name)));
-        if (!alreadyExists) {
-          roadsList.unshift({
-            kind: "highway",
-            num: fb.num || "HW",
-            name: fb.num ? `${fb.num} ${fb.name}` : fb.name,
-            hwName: fb.name,
-            wikiTitle: fb.wikiTitle
-          });
-        }
-      }
-    }
-
-    const roadsHtml = roadsList.length > 0 ? `
-      <div class="wiki-prose-block">
-        <h3>接続する道路</h3>
-        <div class="connected-roads-list">
-          ${roadsList.map(r => {
-            if (r.kind === "highway") {
-              const targetWiki = r.wikiTitle || r.hwName || r.name;
-              const targetName = r.hwName || r.name;
-              const targetNum = r.num || "HW";
-              return `
-                <div class="connected-road-card clickable-hw-card"
-                     role="button"
-                     tabindex="0"
-                     data-hw-num="${escapeHtml(targetNum)}"
-                     data-hw-name="${escapeHtml(targetName)}"
-                     data-hw-wiki="${escapeHtml(targetWiki)}"
-                     title="${escapeHtml(targetName)} の路線ページへ移動">
-                  <div class="connected-road-card-left">
-                    ${renderRoadSign(r)}
-                    <span>${escapeHtml(r.name)}</span>
-                  </div>
-                  <span class="hw-jump-arrow">路線ページへ ↗</span>
-                </div>
-              `;
-            }
-            return `
-              <div class="connected-road-card">
-                ${renderRoadSign(r)}
+    let roadsHtml = "";
+    if (roads.length > 0) {
+      roadsHtml = roads.map(r => {
+        if (r.kind === "highway") {
+          return `
+            <div class="connected-road-card clickable-hw-card"
+                 role="button"
+                 tabindex="0"
+                 data-hw-num="${escapeHtml(r.num || "HW")}"
+                 data-hw-name="${escapeHtml(r.hwName || r.name)}"
+                 data-hw-wiki="${escapeHtml(r.wikiTitle || r.hwName || r.name)}">
+              <div class="connected-road-left">
+                <span class="route-num-badge">${escapeHtml(r.num || "HW")}</span>
                 <span>${escapeHtml(r.name)}</span>
               </div>
-            `;
-          }).join("")}
+              <span class="hw-jump-arrow">路線ページへ ↗</span>
+            </div>
+          `;
+        }
+        return `
+          <div class="connected-road-card">
+            ${r.num ? `<span class="operator-tag">${escapeHtml(r.kind === "national" ? "国道" + r.num + "号" : "県道" + r.num + "号")}</span>` : ""}
+            <span>${escapeHtml(r.name)}</span>
+          </div>
+        `;
+      }).join("");
+    } else if (Array.isArray(fallbackHwLinks) && fallbackHwLinks.length > 0) {
+      roadsHtml = fallbackHwLinks.map(lk => `
+        <div class="connected-road-card clickable-hw-card"
+             role="button"
+             tabindex="0"
+             data-hw-num="${escapeHtml(lk.num || "HW")}"
+             data-hw-name="${escapeHtml(lk.name || lk.wikiTitle)}"
+             data-hw-wiki="${escapeHtml(lk.wikiTitle || lk.name)}">
+          <div class="connected-road-left">
+            <span class="route-num-badge">${escapeHtml(lk.num || "HW")}</span>
+            <span>${escapeHtml(lk.name || lk.wikiTitle)}</span>
+          </div>
+          <span class="hw-jump-arrow">路線ページへ ↗</span>
         </div>
-      </div>
-    ` : "";
+      `).join("");
+    } else {
+      roadsHtml = `<p style="color:#666; font-size:14px;">接続道路の箇条書きデータはありません。</p>`;
+    }
 
-    const historyHtml = icDetail.historyItems && icDetail.historyItems.length > 0 ? `
-      <div class="wiki-prose-block">
-        <h3>歴史・沿革</h3>
-        <ul class="shop-sub-list" style="padding-left: 12px;">
-          ${icDetail.historyItems.map(h => `<li style="margin-bottom: 6px;">${escapeHtml(h)}</li>`).join("")}
+    const historyHtml = historyItems.length > 0 ? `
+      <div style="margin-top:22px;">
+        <h3 class="sapa-sub-heading">沿革・歴史</h3>
+        <ul class="sapa-shop-list">
+          ${historyItems.map(h => `<li>${escapeHtml(h)}</li>`).join("")}
         </ul>
       </div>
     ` : "";
 
-    return heroHtml + adjHtml + roadsHtml + historyHtml;
-  }
+    const prevCard = adjacent && adjacent.prev
+      ? `
+        <div id="prevFacilityBtn" class="adjacent-card" role="button" tabindex="0">
+          <div class="adjacent-dir-label">◀ 起点側（前の施設）</div>
+          <div class="adjacent-facility-name">${escapeHtml(adjacent.prev.fullName || adjacent.prev.shortName)}</div>
+        </div>
+      `
+      : `<div class="adjacent-card disabled"><div class="adjacent-dir-label">◀ 起点側</div><div class="adjacent-facility-name">なし</div></div>`;
 
-  /**
-   * 概要ブロック（要約段落 ＋ 基礎情報テーブル）の描画
-   */
-  function renderOverviewTab(overview, title) {
-    const paragraphsHtml = overview.paragraphs && overview.paragraphs.length > 0
-      ? overview.paragraphs.map(p => `<p>${escapeHtml(p)}</p>`).join("")
-      : `<p>Wikipediaから概要テキストを取得できませんでした。「原文」またはWikipedia本家リンクをご確認ください。</p>`;
-
-    const infoboxHtml = overview.infobox && overview.infobox.length > 0 ? `
-      <aside class="infobox-card">
-        <div class="infobox-card-header">${escapeHtml(title)} 基本データ</div>
-        <table class="infobox-table">
-          <tbody>
-            ${overview.infobox.slice(0, 14).map(row => `
-              <tr>
-                <th>${escapeHtml(row.key)}</th>
-                <td>${escapeHtml(row.val)}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </aside>
-    ` : "";
+    const nextCard = adjacent && adjacent.next
+      ? `
+        <div id="nextFacilityBtn" class="adjacent-card" role="button" tabindex="0" style="text-align:right;">
+          <div class="adjacent-dir-label">終点側（次の施設） ▶</div>
+          <div class="adjacent-facility-name">${escapeHtml(adjacent.next.fullName || adjacent.next.shortName)}</div>
+        </div>
+      `
+      : `<div class="adjacent-card disabled" style="text-align:right;"><div class="adjacent-dir-label">終点側 ▶</div><div class="adjacent-facility-name">なし</div></div>`;
 
     return `
-      <div class="overview-grid">
-        <div class="wiki-prose-block" style="margin-top: 0;">
-          ${paragraphsHtml}
+      <section class="ic-detail-box">
+        <div class="ic-detail-hero">
+          ${info.num && info.num !== "-" ? `<span class="ic-detail-num">[${escapeHtml(info.num)}]</span>` : ""}
+          ${renderFacilityBadges(info.types)}
+          <h3 class="ic-detail-name">${escapeHtml(info.name)}</h3>
+          ${info.km ? `<span class="ic-detail-km-pill">起点から ${escapeHtml(info.km)}</span>` : ""}
         </div>
-        ${infoboxHtml}
-      </div>
+
+        <h4 class="sapa-sub-heading">接続する道路</h4>
+        <div class="connected-roads-list">
+          ${roadsHtml}
+        </div>
+
+        ${historyHtml}
+
+        <div class="adjacent-nav-grid">
+          ${prevCard}
+          ${nextCard}
+        </div>
+      </section>
     `;
-  }
-
-  /**
-   * トップ画面：日本列島・高速道路ネットワーク簡易SVGマップ描画
-   */
-  function renderJapanMap(container, routes, activeRegion, onSelectRegion, onSelectRoute) {
-    const regions = [
-      { id: "hokkaido", label: "北海道", points: "325,25 385,25 395,75 350,95 320,122 308,108 325,70" },
-      { id: "tohoku", label: "東北", points: "312,135 348,135 352,225 315,245 302,215" },
-      { id: "kanto", label: "関東", points: "298,245 342,245 340,302 296,302" },
-      { id: "chubu", label: "中部", points: "225,235 300,235 296,315 220,320 212,275" },
-      { id: "kinki", label: "近畿", points: "172,285 222,285 218,342 170,338" },
-      { id: "chugoku", label: "中国", points: "88,302 170,298 170,335 84,342" },
-      { id: "shikoku", label: "四国", points: "115,346 168,344 164,376 112,376" },
-      { id: "kyushu", label: "九州・沖縄", points: "48,346 95,346 92,415 52,415 22,432 54,432 54,405 48,380" }
-    ];
-
-    const regionPolygons = regions.map(r => {
-      const isAct = activeRegion === r.id ? "active" : "";
-      return `<polygon class="map-region-shape ${isAct}" data-region="${r.id}" data-label="${r.label}" points="${r.points}"></polygon>`;
-    }).join("");
-
-    const routePolylines = routes.map(rt => {
-      if (!rt.mapCoords || rt.mapCoords.length < 2) return "";
-      const pts = rt.mapCoords.map(c => c.join(",")).join(" ");
-      return `<polyline class="map-route-line" data-route-id="${escapeHtml(rt.id)}" data-route-label="${escapeHtml(rt.number + " " + rt.name)}" stroke="${escapeHtml(rt.color || "#1b7837")}" points="${pts}"></polyline>`;
-    }).join("");
-
-    container.innerHTML = `
-      <svg class="japan-map-svg" viewBox="0 0 415 450" role="img" aria-label="日本列島 高速道路簡易マップ">
-        ${regionPolygons}
-        ${routePolylines}
-      </svg>
-      <div class="map-tooltip" id="mapTooltip">
-        <span>地方をクリックで絞り込み / 緑線クリックで路線へ</span>
-      </div>
-    `;
-
-    const tooltip = container.querySelector("#mapTooltip");
-
-    container.querySelectorAll(".map-region-shape").forEach(poly => {
-      poly.addEventListener("mouseenter", () => {
-        tooltip.innerHTML = `<span>エリア：${poly.dataset.label}地方（クリックで絞り込み）</span>`;
-      });
-      poly.addEventListener("click", () => {
-        onSelectRegion(poly.dataset.region);
-      });
-    });
-
-    container.querySelectorAll(".map-route-line").forEach(line => {
-      line.addEventListener("mouseenter", () => {
-        line.classList.add("highlighted");
-        tooltip.innerHTML = `<span>路線：${line.dataset.routeLabel}（クリックで開く）</span>`;
-      });
-      line.addEventListener("mouseleave", () => {
-        line.classList.remove("highlighted");
-      });
-      line.addEventListener("click", (e) => {
-        e.stopPropagation();
-        onSelectRoute(line.dataset.routeId);
-      });
-    });
   }
 
   return {
     escapeHtml,
     renderFacilityBadges,
+    renderJapanMap,
+    renderOverviewTab,
     renderLanesVisual,
     renderSpeedSigns,
     renderSapaDirection,
-    renderIcJctDetail,
-    renderOverviewTab,
-    renderJapanMap
+    renderIcJctDetail
   };
 })();
